@@ -300,7 +300,7 @@ If the change affects users with saved data, add a migration (§7).
 
 **GitHub Pages (current host):** the repository root is served as-is, so `index.html` works without the build step.
 - Settings → Pages → *Deploy from a branch* → `main`, folder `/ (root)`.
-- The site is at `https://<user>.github.io/lgu-field-planner/`.
+- The site is at `https://uiucwonger.github.io/lgu-field-planner/`.
 - Every push to `main` redeploys within about a minute.
 - On the free plan the site is **public**, even if the repository is private.
 
