@@ -1,0 +1,274 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0b0b0b">
+  <link rel="icon" href="logo.png">
+  <title>LGU Field Planner</title>
+  <link rel="stylesheet" href="style.css">
+  <script defer src="seed-data.js"></script>
+  <script defer src="analysis.js"></script>
+  <script defer src="app.js"></script>
+  <script defer src="versions.js"></script>
+  <script defer src="board.js"></script>
+  <script defer src="longterm.js"></script>
+</head>
+<body>
+  <header class="mast">
+    <div class="wrap mast-row">
+      <div class="brand">
+        <img class="logo" src="logo.png" alt="Los Gatos United" onerror="this.onerror=null;this.style.display='none'">
+        <div>
+        <p class="eyebrow">Los Gatos United / Fields &amp; Facilities</p>
+        <h1>Field Planner</h1>
+        </div>
+      </div>
+      <div class="mast-meta">
+        <label>As of <input type="date" id="as-of"></label>
+        <button id="undo" class="hbtn" title="Undo (⌘/Ctrl+Z)" disabled>↶ Undo</button>
+        <button id="redo" class="hbtn" title="Redo (⌘/Ctrl+Shift+Z)" disabled>↷ Redo</button>
+        <button id="quick-version" class="hbtn" title="Save a named version of the current data">Save version</button>
+        <span id="save-state" class="save-state" aria-live="polite"></span>
+      </div>
+    </div>
+  </header>
+
+  <nav class="navline" aria-label="Sections">
+    <div class="wrap tabs" role="tablist">
+      <button role="tab" data-tab="dashboard" aria-selected="true">Dashboard</button>
+      <button role="tab" data-tab="gaps">Weekly gaps</button>
+      <button role="tab" data-tab="board">Board</button>
+      <button role="tab" data-tab="fields">Field inventory</button>
+      <button role="tab" data-tab="teams">Teams &amp; targets</button>
+      <button role="tab" data-tab="schedule">Schedule</button>
+      <button role="tab" data-tab="history">Versions</button>
+      <button role="tab" data-tab="data">Data &amp; settings</button>
+      <span class="tab-divider" aria-hidden="true">|</span>
+      <button role="tab" data-tab="longterm">Long Term Planning</button>
+    </div>
+  </nav>
+
+  <main class="wrap">
+    <!-- DASHBOARD -->
+    <section id="dashboard" role="tabpanel">
+      <div id="kpis" class="kpis"></div>
+      <div class="grid2">
+        <div class="card">
+          <h2>Daily competitive capacity</h2>
+          <p class="hint">Capacity on usable fields compared with peak players already booked. Hatched = players on lapsed or lost fields (at risk).</p>
+          <div id="daily-chart"></div>
+        </div>
+        <div class="card">
+          <h2>Field status</h2>
+          <div id="status-summary"></div>
+        </div>
+      </div>
+      <div class="grid2">
+        <div class="card">
+          <h2>Action list</h2>
+          <ol id="actions" class="actions"></ol>
+        </div>
+        <div class="card">
+          <h2>Coverage by program</h2>
+          <div id="program-table"></div>
+        </div>
+      </div>
+      <div class="card" id="issues-card">
+        <div class="issues-head"><h2>Data issues</h2><div id="issues-summary" class="issues-summary"></div></div>
+        <div id="issues" class="issues"></div>
+      </div>
+    </section>
+
+    <!-- WEEKLY GAPS -->
+    <section id="gaps" role="tabpanel" hidden>
+      <div class="card">
+        <h2>Field utilization by day</h2>
+        <p class="hint">Peak simultaneous competitive players ÷ capacity. Click a cell to see that field's bookings for the day.</p>
+        <div class="controls">
+          <label><input type="checkbox" id="heat-comp-only" checked> Only fields with competitive use or capacity</label>
+        </div>
+        <div class="scroller"><table id="heatmap" class="heat"></table></div>
+        <div id="heat-detail" class="detail" hidden></div>
+        <div class="legend"><span class="sw u0"></span>&lt;50% <span class="sw u1"></span>50–79% <span class="sw u2"></span>80–99% <span class="sw u3"></span>100%+ <span class="sw risk"></span>Field not usable <span class="sw none"></span>No window</div>
+      </div>
+      <div class="card">
+        <h2>Team coverage by day</h2>
+        <div class="controls">
+          <label>Program <select id="gap-program"><option value="">All</option></select></label>
+          <label>Show <select id="gap-filter"><option value="short">Teams below target</option><option value="risk">Teams with at-risk sessions</option><option value="">All teams</option></select></label>
+          <label>Search <input type="search" id="gap-query" placeholder="Team or age"></label>
+        </div>
+        <p id="gap-count" class="hint"></p>
+        <div class="scroller"><table id="team-matrix" class="matrix"></table></div>
+        <div class="legend"><span class="chip secure">S</span>Secure <span class="chip atRisk">R</span>At risk (field not usable) <span class="chip canceled">C</span>Canceled</div>
+      </div>
+      <div class="card">
+        <h2>Suggested placements</h2>
+        <p class="hint">A greedy fill of each team's shortfall into remaining headroom on usable fields. Treat these as candidates to check (age fit, field size, lights), not final assignments.</p>
+        <div class="controls"><button id="export-suggestions" class="btn">Export CSV</button></div>
+        <div class="scroller short"><table id="suggestions"></table></div>
+        <div id="unplaced"></div>
+      </div>
+    </section>
+
+    <!-- BOARD -->
+    <section id="board" role="tabpanel" hidden>
+      <div class="board-layout">
+        <aside class="card tray-card">
+          <h2>Teams below target</h2>
+          <p class="hint">Drag a team onto a field and day to add a session. The time defaults to the block on that field with the most room.</p>
+          <div id="board-tray" class="tray"></div>
+          <div class="dropzones">
+            <div id="dz-delete" class="dz danger">Drag a session here to remove it from the board</div>
+          </div>
+        </aside>
+        <div class="card board-card">
+          <h2>Schedule board</h2>
+          <p class="hint">Drag a session card to another field or day to move it (its time is kept). Click a card to edit its time. Each cell shows that field's peak players ÷ capacity for the day; the row shows the weekly average and the busiest day. While you drag, green cells have room for that team, amber cells have no capacity on record, and red cells are full, not usable, the wrong surface for the team's program, or a day the team already trains.</p>
+          <div class="controls">
+            <label>Highlight team <input type="search" id="board-query" placeholder="Team name"></label>
+            <label>Field <select id="board-field" class="board-field"></select></label>
+            <label>Sort <select id="board-sort"><option value="util">Utilization (high → low)</option><option value="headroom">Most open capacity</option><option value="capacity">Capacity</option><option value="name">Name</option></select></label>
+            <button id="board-optimize" class="btn primary" title="Fill every team to its weekly target using the open capacity">⚡ Optimize</button>
+          </div>
+          <div id="opt-panel" class="opt-panel" hidden></div>
+          <div class="scroller board-scroll"><div id="board-grid"></div></div>
+        </div>
+      </div>
+      <div id="board-editor" class="editor" hidden role="dialog" aria-label="Edit session"></div>
+    </section>
+
+    <!-- HISTORY -->
+    <section id="history" role="tabpanel" hidden>
+      <div class="grid2">
+        <div class="card">
+          <h2>Save a version</h2>
+          <p class="hint">A version is a full snapshot of fields, teams, bookings and settings, saved in this browser. Versions are also saved automatically before imports, resets and restores.</p>
+          <div class="form">
+            <label>Name <input id="ver-name" placeholder="e.g. Week of Nov 30 – draft"></label>
+            <label style="max-width:none">Note <textarea id="ver-note" rows="2" placeholder="What changed and why (optional)"></textarea></label>
+            <div><button id="ver-save" class="btn">Save version</button></div>
+          </div>
+          <h2 style="margin-top:16px">Undo history</h2>
+          <p id="undo-info" class="hint"></p>
+        </div>
+        <div class="card">
+          <h2>Compare</h2>
+          <div class="controls">
+            <label>From <select id="cmp-a"></select></label>
+            <label>To <select id="cmp-b"></select></label>
+            <button id="cmp-go" class="btn">Compare</button>
+          </div>
+          <div id="version-diff" class="diff"></div>
+        </div>
+      </div>
+      <div class="card">
+        <h2>Saved versions</h2>
+        <p id="ver-storage" class="hint"></p>
+        <div class="scroller short"><table id="version-table"></table></div>
+      </div>
+    </section>
+
+    <!-- FIELDS -->
+    <section id="fields" role="tabpanel" hidden>
+      <div class="card">
+        <h2>Field inventory</h2>
+        <p class="hint">Edit any cell; changes save automatically and update the analysis. <b>Status</b> is calculated from comp use, permit and renewal date. Choose a value in the Status column to set it manually, or pick <i>Auto</i> to go back to the calculated value. <b>Capacity used</b> is fixed: your <b>Planning cap</b> if set, otherwise the <b>Baseline cap</b> (largest group seen Oct 19–23). Moving or removing sessions never changes it. Daily windows use 24-hour <code>HH:MM–HH:MM</code>, one per line. Click a column name to sort (again to reverse, a third time to clear). Use the box under it to filter: choose a value, or type text; numbers accept <code>&gt;100</code>, <code>&lt;50</code>, <code>50-150</code>; <i>(blank)</i> and <i>(not blank)</i> work on every column.</p>
+        <div class="controls">
+          <label>Search all columns <input type="search" id="field-query" placeholder="Any text"></label>
+          <button id="field-clear" class="btn" hidden>Clear filters &amp; sort</button>
+          <button id="add-field" class="btn">+ Add field</button>
+        </div>
+        <p id="field-count" class="hint"></p>
+        <div class="scroller"><table id="field-table" class="edit"></table></div>
+      </div>
+    </section>
+
+    <!-- TEAMS -->
+    <section id="teams" role="tabpanel" hidden>
+      <div class="card">
+        <h2>Teams &amp; session targets</h2>
+        <p class="hint"><b>Coach(es):</b> separate several with <code>;</code>. Optimize never puts a coach at two different fields at the same time (or with less than the travel time set in Data &amp; settings), and keeps a coach's teams on the same field when it can. Program is inferred from the team name unless you set it. Leave <b>Target</b> blank to use the program default (Data &amp; settings).</p>
+        <div class="controls">
+          <label>Search <input type="search" id="team-query" placeholder="Team, age or coach"></label>
+          <button id="add-team" class="btn">+ Add team</button>
+          <button id="exp-coaches" class="btn" title="Download a CSV of team,coach to fill in">Coach template (CSV)</button>
+          <label class="btn file" title="CSV with columns team,coach">Import coaches (CSV)<input type="file" id="imp-coaches" accept=".csv,text/csv" hidden></label>
+        </div>
+        <p id="team-count" class="hint"></p>
+        <div class="scroller"><table id="team-table" class="edit"></table></div>
+      </div>
+    </section>
+
+    <!-- SCHEDULE -->
+    <section id="schedule" role="tabpanel" hidden>
+      <div class="card">
+        <h2>Schedule</h2>
+        <p class="hint">Edit, cancel or add bookings. Only bookings whose team is on Teams &amp; targets (competitive teams and GK groups) count toward capacity; others (rec, technical training) are kept for reference.</p>
+        <div class="controls">
+          <label>Day <select id="sch-day"><option value="">All</option></select></label>
+          <label>Field <select id="sch-field"><option value="">All</option></select></label>
+          <label>Type <select id="sch-type"><option value="comp">Competitive</option><option value="">All</option><option value="other">Rec / other</option></select></label>
+          <label>Search <input type="search" id="sch-query" placeholder="Team"></label>
+          <button id="add-booking" class="btn">+ Add booking</button>
+        </div>
+        <p id="sch-count" class="hint"></p>
+        <div class="scroller"><table id="sch-table" class="edit"></table></div>
+      </div>
+      <datalist id="dl-fields"></datalist>
+      <datalist id="dl-teams"></datalist>
+    </section>
+
+    <!-- DATA -->
+    <section id="longterm" role="tabpanel" hidden>
+      <div id="longterm-body"></div>
+    </section>
+
+    <section id="data" role="tabpanel" hidden>
+      <div class="grid2">
+        <div class="card">
+          <h2>Planning settings</h2>
+          <div class="form">
+            <label>Renewal warning (days) <input type="number" min="0" id="set-expiring"></label>
+            <label>Coach travel time between fields (min) <input type="number" min="0" max="120" step="5" id="set-travel"></label>
+            <fieldset><legend>Days in planning week</legend><div id="set-days" class="inline"></div></fieldset>
+            <fieldset><legend>Default sessions per week, by program</legend><div id="set-targets" class="targets"></div></fieldset>
+            <fieldset><legend>Field surfaces allowed, by program</legend>
+              <p class="hint">Used by Optimize, the board's drop check and the Data issues list. A field with no surface set is allowed for everyone.</p>
+              <table id="set-surfaces" class="surface-matrix"></table>
+              <div style="margin-top:6px"><button id="surface-defaults" class="btn mini">Restore defaults</button></div>
+            </fieldset>
+          </div>
+        </div>
+        <div class="card">
+          <h2>Import &amp; export</h2>
+          <div class="stack">
+            <button id="exp-json" class="btn">Export all data (JSON)</button>
+            <label class="btn file">Import data (JSON)<input type="file" id="imp-json" accept=".json,application/json" hidden></label>
+            <hr>
+            <button id="exp-gaps" class="btn">Export team gaps (CSV)</button>
+            <button id="exp-fields" class="btn">Export field status (CSV)</button>
+            <button id="exp-bookings" class="btn">Export bookings (CSV)</button>
+            <label class="btn file">Import bookings (CSV)<input type="file" id="imp-csv" accept=".csv,text/csv" hidden></label>
+            <label class="inline"><input type="checkbox" id="imp-replace"> Replace existing bookings on CSV import</label>
+            <p class="hint">CSV columns: <code>day,field,start,end,team,canceled,note</code>. Day is Mon–Sun; times are 24-hour.</p>
+            <hr>
+            <button id="reset" class="btn danger">Reset to seed data</button>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <h2>How the analysis works</h2>
+        <ul class="hint">
+          <li><b>Status:</b> a field with competitive use is <i>Lapsed</i> if its renewal date is before the as-of date, <i>Expiring</i> within the warning window, and <i>Pending permit</i> if the permit is pending. Lapsed and Lost fields are not usable. A status set manually on the Field inventory tab replaces the calculated one until it is set back to Auto.</li>
+          <li><b>Capacity:</b> fixed per field. The planning cap if set; otherwise the baseline cap (the largest group of competitive and GK players on the field at once, Oct 19–23). Moving or removing sessions never changes it.</li>
+          <li><b>Team sessions:</b> the number of distinct days with a non-canceled booking. A session is <i>secure</i> on a usable field and <i>at risk</i> on a lapsed or lost field. Gap = target − secure.</li>
+          <li><b>Optimize / placements:</b> turf-only programs (ECNL, ECNL RL by default) are placed first, then teams with the biggest gap and roster. Each session goes on a usable field with an allowed surface and enough headroom, on a day the team doesn't already train securely, and preferably not the day before or after another session. A session on a lapsed or lost field can be moved to a usable field on the same day.</li>
+          <li>Data is saved in this browser (localStorage). Export JSON to back up or share.</li>
+        </ul>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

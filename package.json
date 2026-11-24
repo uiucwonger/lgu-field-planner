@@ -1,0 +1,14 @@
+{
+  "name": "lgu-field-planner",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Los Gatos United field schedule, capacity and long-term planning tool. Static HTML/JS; no build step needed to run.",
+  "scripts": {
+    "test": "node tools/test-analysis.js",
+    "test:ui": "node tools/test-ui.js",
+    "build": "node tools/build-single.js"
+  },
+  "devDependencies": {
+    "jsdom": "^24.0.0"
+  }
+}
