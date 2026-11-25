@@ -29,7 +29,7 @@
         <label>As of <input type="date" id="as-of"></label>
         <button id="undo" class="hbtn" title="Undo (⌘/Ctrl+Z)" disabled>↶ Undo</button>
         <button id="redo" class="hbtn" title="Redo (⌘/Ctrl+Shift+Z)" disabled>↷ Redo</button>
-        <button id="quick-version" class="hbtn" title="Save a named version of the current data">Save version</button>
+        <button id="quick-version" class="hbtn" title="Save a version for everyone (editors)">Save version</button>
         <span id="save-state" class="save-state" aria-live="polite"></span>
       </div>
     </div>
@@ -146,21 +146,8 @@
       <div class="card shared-card" id="shared-card"></div>
       <div class="card">
         <h2>Compare</h2>
-        <p class="hint">Click <b>Compare</b> on any shared version above to see what changed against your current plan, or pick two copies saved on this device.</p>
-        <div class="controls">
-          <label>From <select id="cmp-a"></select></label>
-          <label>To <select id="cmp-b"></select></label>
-          <button id="cmp-go" class="btn">Compare</button>
-        </div>
-        <div id="version-diff" class="diff"></div>
+        <div id="version-diff" class="diff"><p class="hint">Click <b>Compare</b> on any shared version above to see what changed against your current plan: bookings, fields and teams added, removed or changed, plus KPI changes.</p></div>
       </div>
-      <details class="card device-copies">
-        <summary><h2>Copies on this device</h2><span class="muted">Automatic backups and view-only saves. Not shared.</span></summary>
-        <p class="hint">The planner keeps a private copy here every time you save, and before imports, restores or loading a shared plan, so nothing is lost. If you don't have the editor link, <b>Save version</b> saves here only.</p>
-        <p id="ver-storage" class="hint"></p>
-        <div class="scroller short"><table id="version-table"></table></div>
-        <p id="undo-info" class="hint"></p>
-      </details>
     </section>
 
     <!-- FIELDS -->

@@ -35,7 +35,7 @@ Requirements: any modern browser (Safari, Chrome, Edge, Firefox). Node 18+ for t
 | `seed-data.js` | `window.LGU_SEED`, the starting data set | One long JSON line. Regenerate with a script, don't hand-edit (see §8) |
 | `analysis.js` | **Analysis engine.** Pure functions, no DOM | Works in the browser (`window.LGUAnalysis`) and Node (`require`). Most business logic lives here |
 | `app.js` | UI core: state, save/load, migrations, tabs, Dashboard, Weekly gaps, Field inventory, Teams, Schedule, Data & settings, import/export | Defines shared globals used by the other UI files |
-| `versions.js` | Undo/redo, named versions, compare, restore | `window.LGUVersions` |
+| `versions.js` | Undo/redo (in session) and the Compare view | `window.LGUVersions`. Saved versions live on GitHub only (`github-sync.js`) |
 | `board.js` | Drag-and-drop Board tab and the **Optimize** panel | `window.LGUBoard` |
 | `longterm.js` | **Long Term Planning** tab | `window.LGULongTerm`. Meeting-note content (owners, blockers, options) is hard-coded here |
 | `github-sync.js` | **Shared versions on GitHub** (Versions tab, top card + header banner) | `window.LGUShared`. See §10a |
@@ -329,8 +329,8 @@ No other code needs to know where data lives.
 
 | Who | Opens | Can |
 |---|---|---|
-| Viewers | `https://uiucwonger.github.io/lgu-field-planner/` | See the latest shared plan and its full history; compare, load or download any version; try changes. *Save version* stays on their device |
-| Editors | **Editor link** `https://uiucwonger.github.io/lgu-field-planner/#key=<token>` (once per device) | Everything above, plus **Save version saves for everyone**: one GitHub commit, with their name (asked once) and the time |
+| Viewers | `https://uiucwonger.github.io/lgu-field-planner/` | See the latest shared plan and its full history; compare, load or download any version; try changes. No *Save version* button |
+| Editors | **Editor link** `https://uiucwonger.github.io/lgu-field-planner/#key=<token>` (once per device) | Everything above, plus **Save version**: one GitHub commit, with their name (asked once) and the time |
 
 - **Editor link:** the key is remembered on the device and removed from the address bar. The `#…` part of a URL is never sent to the web server.
 - **Copying the link:** editors can copy it for others under *Versions → Shared versions → Editor options*.
@@ -341,10 +341,12 @@ No other code needs to know where data lives.
 **Behavior on page load:**
 1. **First visit on a device:** loads the latest shared plan automatically.
 2. **Returning, no local edits since loading a shared version:** follows the latest shared version automatically.
-3. **Returning with unpublished local edits:** nothing is overwritten. A banner offers *See what changed* or *Load it*; loading auto-saves the local edits as a device version first.
+3. **Returning with unsaved local edits:** nothing is overwritten automatically. A banner offers *See what changed* or *Load it*. Loading asks first, and the edits can be brought back with Undo until the page is reloaded. Editors are prompted to Save version first.
+
+**No device versions:** versions exist only on GitHub. The old `lgu-field-planner-versions-v1` storage key is removed on load. Safety nets: in-session Undo (50 steps, covers Optimize, import, reset and load), the current working plan autosaved in the browser, and *Export all data (JSON)*.
 4. **GitHub unreachable or rate-limited:** the app works from local data, and the card explains why.
 
-**Two editors:** before saving, the planner compares the file's current `sha` with the one this browser loaded. If someone saved in between, the editor sees whose version it was and chooses: save theirs as the newest version (both stay in the history), or keep theirs on the device only. GitHub also rejects stale writes with 409.
+**Two editors:** before saving, the planner compares the file's current `sha` with the one this browser loaded. If someone saved in between, the editor sees whose version it was and chooses: save theirs as the newest version (both stay in the history), or cancel and keep working, with their edits still on screen. GitHub also rejects stale writes with 409.
 
 **Limits:**
 - Unauthenticated GitHub API reads are 60/hour per network; one page load uses 2, so about 30 page loads an hour from one location. Editors with a token get 5,000/hour.
@@ -362,7 +364,7 @@ No other code needs to know where data lives.
 - Day keys are `Mon`–`Sun`.
 - Field and team **names are keys**. Use `renameEverywhere()` in `app.js` when renaming.
 - Every user-visible list should handle "empty" explicitly. Never pass `null` or objects as text.
-- Every board action must be one undo step: call `window.LGUVersions.commit()` before mutating.
+- Every board action must be one undo step: call `window.LGUVersions.commit()` before mutating. Whole-plan replacements go through `LGUVersions.replaceState()` so they're undoable.
 - Update `README.md` (user guide) and this handbook when behavior changes.
 
 ---

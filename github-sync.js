@@ -14,7 +14,7 @@
  * can't silently overwrite each other: a stale sha is caught before publishing (and GitHub rejects it with 409).
  *
  * Uses app.js globals (state, result, changed, h, $, A, clone, download, showTab, currentTab, renderHooks,
- * HAD_SAVED_DATA) and window.LGUVersions (replaceState, compareStates, saveVersion). */
+ * HAD_SAVED_DATA) and window.LGUVersions (replaceState, compareStates). */
 'use strict';
 (function () {
   // ---------------------------------------------------------------- configuration
@@ -135,8 +135,8 @@
   let status = { kind: 'idle', text: '' };
   const setStatus = (kind, text) => { status = { kind, text }; paint(); };
 
-  function load(remote, label) {
-    LGUVersions.replaceState(remote.data, label);
+  function load(remote) {
+    LGUVersions.replaceState(remote.data);
     setSync({ sha: remote.sha, commit: remote.commit, message: remote.message, date: remote.date, author: remote.author, baseHash: hash(remote.data) });
     paint();
   }
@@ -153,14 +153,17 @@
     } else el.hidden = true;
   }
   function confirmLoad(remote) {
-    const msg = dirty() ? `Load shared “${remote.message}”?\n\nYou have unpublished changes. They'll be kept as a version on this device (Versions tab) so nothing is lost.` : `Load shared “${remote.message}”?`;
+    const msg = dirty()
+      ? `Load shared “${remote.message}”?\n\nYour changes that haven't been saved as a version will be replaced. ${token() ? 'To keep them, Cancel and click Save version first.' : 'You can Undo right after loading (until you reload the page).'}`
+      : `Load shared “${remote.message}”?`;
     if (!confirm(msg)) return;
-    load(remote, dirty() ? 'My unpublished changes (before loading shared plan)' : 'Before loading shared plan');
+    load(remote);
     notify(`Loaded shared plan “${remote.message}”`);
   }
 
   function paint() {
     banner();
+    const qv = $('quick-version'); if (qv) qv.hidden = !token();
     const card = $('shared-card'); if (!card) return;
     const c = cfg(), s = sync(), signedIn = !!token();
     const repoUrl = `https://github.com/${c.owner}/${c.repo}`;
@@ -172,7 +175,7 @@
         h('a', { href: `${repoUrl}/commits/${c.branch}/${c.path}`, target: '_blank', rel: 'noopener', class: 'muted', text: `${c.owner}/${c.repo} · ${c.path}` })),
       h('p', { class: 'hint', text: signedIn
         ? 'You can edit. Click Save version (top right or below) and your version is saved on GitHub for everyone, with your name and the time. Every version is kept.'
-        : 'View-only on this device. You can explore and try changes here; Save version keeps a copy on this device only (see Copies on this device below). Open the editor link to save versions for everyone.' }),
+        : 'View only. You can explore and try changes here, but only editors can save versions. Open the editor link to edit.' }),
       h('p', {}, h('span', { class: `lt-chip ${signedIn ? 'ok' : 'low'}`, text: signedIn ? `Editor${editorName() ? ` · ${editorName()}` : ''}` : 'View only' }), ' ', ...where),
       status.text ? h('p', { class: `shared-status ${status.kind}`, text: status.text }) : null,
       h('div', { class: 'controls' },
@@ -230,7 +233,6 @@
   async function saveShared(name, note = '') {
     const author = askName();
     const message = note ? `${name}\n\n${note}` : name;
-    LGUVersions.saveVersion(name, note, false); // also keep a copy on this device
     try {
       setStatus('busy', `Saving “${name}” for everyone…`);
       try { await publish(message, { author }); }
@@ -239,7 +241,7 @@
         await refresh(true);
         const other = latest ? `“${latest.message.split('\n')[0]}” by ${latest.author || 'another editor'} (${fmt(latest.date)})` : 'a newer version';
         if (!confirm(`${other} was saved after you loaded the plan.\n\nSave yours as the newest shared version anyway? Theirs stays in the history, and you can compare the two in Versions.`)) {
-          setStatus('idle', `Not shared. “${name}” is saved on this device only.`); return false;
+          setStatus('idle', `Not saved. Your changes are still here; compare with their version above, then save again.`); return false;
         }
         await publish(message, { author, force: true });
       }
@@ -248,14 +250,14 @@
       await refresh(true);
       return true;
     } catch (e) {
-      const kept = `“${name}” is saved on this device.`;
+      const kept = 'Your changes are still here; nothing was lost.';
       setStatus('error',
         e.status === 401 ? `GitHub didn't recognize the editor key (expired or deleted). Ask for a new editor link. ${kept}`
         : e.status === 403 && /not accessible by personal access token/i.test(e.message)
           ? `The editor key can read but not save. On GitHub, edit the key: Repository access must include ${cfg().owner}/${cfg().repo}, and Repository permissions → Contents must be "Read and write". The same editor link keeps working after you update it. ${kept}`
         : e.status === 403 || e.status === 404 ? `GitHub refused the save (${e.message}). Check the editor key has access to ${cfg().owner}/${cfg().repo} with Contents: Read and write. ${kept}`
         : `Couldn't save to GitHub (${e.message}). ${kept} Try again later.`);
-      if (currentTab !== 'history') notify(`Saved on this device only (GitHub: ${e.status || 'offline'})`, 6000);
+      if (currentTab !== 'history') notify(`Not saved to GitHub (${e.status || 'offline'}). See Versions.`, 6000);
       return false;
     }
   }
@@ -289,9 +291,9 @@
     const s = sync();
     if (keyJustAdded) notify('Editing enabled on this device. Save version now saves for everyone.', 6000);
     // First visit on this device (no saved data): start from the shared plan automatically.
-    if (!HAD_SAVED_DATA && !s.commit) { load(remote, null); notify(`Loaded shared plan “${remote.message}”`); return; }
+    if (!HAD_SAVED_DATA && !s.commit) { load(remote); notify(`Loaded shared plan “${remote.message}”`); return; }
     // Returning visitor who hasn't changed anything since loading a shared version: follow the latest quietly.
-    if (s.commit && s.commit !== remote.commit && !dirty()) { load(remote, 'Before updating to latest shared plan'); notify(`Updated to shared plan “${remote.message}”`); return; }
+    if (s.commit && s.commit !== remote.commit && !dirty()) { load(remote); notify(`Updated to shared plan “${remote.message}”`); return; }
     paint(); // otherwise show the banner and let the user decide
   })();
   renderHooks.push(() => { if (currentTab === 'history') paint(); else banner(); });

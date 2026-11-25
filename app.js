@@ -705,7 +705,7 @@ $('imp-coaches').addEventListener('change', async e => {
   changed(true); e.target.value = '';
   alert(`Coaches set for ${set} team(s).${missing.length ? `\nNot found (${missing.length}): ${missing.slice(0, 8).join(', ')}${missing.length > 8 ? '…' : ''}` : ''}`);
 });
-$('reset').addEventListener('click', () => { if (confirm('Discard all edits and reload the seed data? A version of the current data is saved first.')) { beforeReplaceHooks.forEach(f => f('Before reset')); state = clone(window.LGU_SEED); changed(true); } });
+$('reset').addEventListener('click', () => { if (confirm('Discard all edits and reload the seed data? You can Undo this until you reload the page.')) { beforeReplaceHooks.forEach(f => f('Before reset')); state = clone(window.LGU_SEED); changed(true); } });
 
 render(true);
 $('save-state').textContent = localStorage.getItem(STORE) ? 'Loaded saved edits' : 'Seed data';

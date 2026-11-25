@@ -69,8 +69,7 @@ const EDITOR = 'https://uiucwonger.github.io/lgu-field-planner/#key=good-token';
   V.d.querySelector('[data-tab=history]').click(); await wait(100);
   ok(/View only/.test(T(V.d.getElementById('shared-card'))) && /Nothing published yet/.test(T(V.d.getElementById('shared-card'))), 'plain link = view only; "Nothing published yet"');
   ok(!/token/i.test(T(V.d.getElementById('shared-card'))), 'no token box or token wording anywhere');
-  await saveVia(V, 'viewer draft');
-  ok(repo.commits.length === 0 && V.w.LGUVersions.loadVersions().some(v => v.name === 'viewer draft'), 'view-only Save version stays on the device');
+  ok(V.d.getElementById('quick-version').hidden, 'view-only: no Save version button');
 
   // 2. Editor link: no setup, Save version saves for everyone
   let A = browser({}, EDITOR); await wait(500);
@@ -80,7 +79,8 @@ const EDITOR = 'https://uiucwonger.github.io/lgu-field-planner/#key=good-token';
   ok(/for everyone/.test(await saveVia(A, 'Week of Dec 1 – first shared plan')), 'header "Save version" saves for everyone');
   ok(repo.commits.length === 1 && JSON.parse(repo.commits[0].text).bookings.length === 400, 'GitHub holds the plan as a commit');
   ok(repo.commits[0].author === 'Jason Wong', 'shared history shows the editor\'s name');
-  ok(A.w.LGUVersions.loadVersions().some(v => v.name === 'Week of Dec 1 – first shared plan'), 'a copy is also kept on the device');
+  ok(!A.d.getElementById('quick-version').hidden, 'editor sees the Save version button');
+  ok(!A.d.getElementById('version-table') && A.w.localStorage.getItem('lgu-field-planner-versions-v1') === null, 'no versions stored on the device');
   const editorAgain = browser(A.storage()); await wait(500);
   ok(editorAgain.w.LGUShared.canPublish(), 'editor stays an editor on later visits with the plain link');
 
@@ -106,7 +106,9 @@ const EDITOR = 'https://uiucwonger.github.io/lgu-field-planner/#key=good-token';
   ok(!B.d.getElementById('shared-banner').hidden && /newer shared plan/.test(T(B.d.getElementById('shared-banner'))), 'banner offers the newer shared plan');
   [...B.d.querySelectorAll('#shared-banner button')].find(x => x.textContent === 'Load it').click(); await wait(400);
   ok(bookings(B.w) === 385, '"Load it" loads the latest shared plan');
-  ok(B.w.LGUVersions.loadVersions().some(v => /unpublished changes/.test(v.name) && v.data.bookings.length === 380), 'the unpublished edits were kept as a local version');
+  B.d.getElementById('undo').click(); await wait(400);
+  ok(bookings(B.w) === 380, 'Undo right after loading brings the unsaved edits back');
+  B.d.getElementById('redo').click(); await wait(400);
 
   // 6. History: list, compare, load an older version
   B.d.querySelector('[data-tab=history]').click(); await wait(100);
@@ -124,7 +126,7 @@ const EDITOR = 'https://uiucwonger.github.io/lgu-field-planner/#key=good-token';
   C.w.eval("state.bookings = state.bookings.slice(0, 360); changed(true);"); await wait(300);
   C.w.confirm = q => (C.w.__lastConfirm = q, false);
   let msg = await saveVia(C, 'C declines');
-  ok(/was saved after you loaded/.test(C.w.__lastConfirm) && repo.commits[0].message === 'A saves first' && /device only/.test(msg), 'second editor is warned; declining keeps theirs on the device only');
+  ok(/was saved after you loaded/.test(C.w.__lastConfirm) && repo.commits[0].message === 'A saves first' && /still here/.test(msg) && bookings(C.w) === 360, 'second editor is warned; declining keeps their edits on screen, unsaved');
   C.w.confirm = () => true;
   await saveVia(C, 'C saves anyway');
   ok(repo.commits[0].message === 'C saves anyway' && repo.commits[1].message === 'A saves first', 'saving anyway keeps both versions in the shared history');

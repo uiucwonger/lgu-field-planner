@@ -281,7 +281,6 @@
   function closeOptimize() { preview = null; $('opt-panel').hidden = true; }
   function applyOptimize() {
     if (!preview || !preview.length) return;
-    if (window.LGUVersions) window.LGUVersions.saveVersion('Before Optimize', `${preview.length} sessions to place`, true);
     checkpoint();
     let n = 0, moved = 0;
     const stamp = Date.now();
