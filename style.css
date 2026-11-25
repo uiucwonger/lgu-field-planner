@@ -395,3 +395,5 @@ a.btn{text-decoration:none;display:inline-block}
 .device-copies>summary h2{margin:0;display:inline}
 .device-copies>summary h2::before{content:'▸ ';color:var(--muted)}
 .device-copies[open]>summary h2::before{content:'▾ '}
+.btn.mini.danger{color:#8f2a2a;border-color:#e3b4b4}
+.btn.mini.danger:hover{background:#fbeeee}

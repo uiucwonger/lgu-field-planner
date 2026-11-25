@@ -7,33 +7,44 @@ const fs = require('fs'), path = require('path'), assert = require('assert');
 const { JSDOM, VirtualConsole } = require('jsdom');
 const root = path.join(__dirname, '..');
 
-// ---------------- fake GitHub (one repo, one file history)
-const repo = { commits: [], files: {} }; // commits: newest first {sha, message, author, date, fileSha, text}
+// ---------------- fake GitHub (one repo; commits touch one file each)
+const repo = { commits: [] }; // newest first: {sha, path, message, author, date, fileSha, text}
 let n = 0;
 const sha = () => (++n).toString(16).padStart(40, 'a');
+const latestFor = (path, ref) => repo.commits.find(c => c.path === path && (ref === 'main' || !ref || c.sha === ref)) ||
+  (ref && ref !== 'main' ? (() => { const i = repo.commits.findIndex(c => c.sha === ref); return i < 0 ? null : repo.commits.slice(i).find(c => c.path === path); })() : null);
 function fakeFetch(url, opts = {}) {
   const u = new URL(url), auth = (opts.headers || {}).Authorization, ok = auth === 'Bearer good-token';
   const json = (status, body) => Promise.resolve({ ok: status < 300, status, statusText: String(status), json: async () => body, text: async () => JSON.stringify(body) });
+  if (u.hostname === 'raw.githubusercontent.com') {
+    const path = u.pathname.split('/').slice(4).join('/'); const c = latestFor(path, 'main');
+    return c ? json(200, JSON.parse(c.text)) : json(404, {});
+  }
   const m = u.pathname.match(/^\/repos\/([^/]+)\/([^/]+)(\/.*)?$/);
   if (!m) return json(404, { message: 'Not Found' });
   const rest = m[3] || '';
   if (rest === '') return json(200, { full_name: `${m[1]}/${m[2]}`, permissions: { push: ok, admin: false } });
-  if (rest === '/commits') return json(200, repo.commits.slice(0, Number(u.searchParams.get('per_page')) || 30).map(c => ({ sha: c.sha, html_url: `https://github.com/x/commit/${c.sha}`, commit: { message: c.message, author: { name: c.author, date: c.date } } })));
+  if (rest === '/commits') {
+    const path = u.searchParams.get('path');
+    return json(200, repo.commits.filter(c => c.path === path).slice(0, Number(u.searchParams.get('per_page')) || 30)
+      .map(c => ({ sha: c.sha, html_url: `https://github.com/x/commit/${c.sha}`, commit: { message: c.message, author: { name: c.author, date: c.date } } })));
+  }
   if (rest.startsWith('/contents/')) {
+    const path = decodeURIComponent(rest.slice('/contents/'.length));
     if ((opts.method || 'GET') === 'GET') {
-      const ref = u.searchParams.get('ref'); const c = repo.commits.find(x => x.sha === ref) || (ref === 'main' ? repo.commits[0] : null);
-      if (!c) return json(404, { message: 'Not Found' });
-      return json(200, { sha: c.fileSha, encoding: 'base64', content: Buffer.from(c.text, 'utf8').toString('base64') });
+      const c = latestFor(path, u.searchParams.get('ref'));
+      return c ? json(200, { sha: c.fileSha, encoding: 'base64', content: Buffer.from(c.text, 'utf8').toString('base64') }) : json(404, { message: 'Not Found' });
     }
     if (!ok) return json(401, { message: 'Bad credentials' });
-    const body = JSON.parse(opts.body); const head = repo.commits[0];
+    const body = JSON.parse(opts.body); const head = latestFor(path, 'main');
     if (head && body.sha !== head.fileSha) return json(409, { message: 'is at ' + head.fileSha + ' but expected ' + body.sha });
-    const c = { sha: sha(), fileSha: sha(), message: body.message, author: (body.author && body.author.name) || 'uiucwonger', date: new Date(Date.now() + n * 1000).toISOString(), text: Buffer.from(body.content, 'base64').toString('utf8') };
+    const c = { sha: sha(), path, fileSha: sha(), message: body.message, author: (body.author && body.author.name) || 'uiucwonger', date: new Date(Date.now() + n * 1000).toISOString(), text: Buffer.from(body.content, 'base64').toString('utf8') };
     repo.commits.unshift(c);
     return json(201, { content: { sha: c.fileSha }, commit: { sha: c.sha, author: { name: c.author, date: c.date } } });
   }
   return json(404, { message: 'Not Found' });
 }
+const planCommits = () => repo.commits.filter(c => c.path === 'data/plan.json');
 
 // ---------------- a "browser"
 function browser(storage = {}, url = 'https://uiucwonger.github.io/lgu-field-planner/') {
@@ -77,8 +88,8 @@ const EDITOR = 'https://uiucwonger.github.io/lgu-field-planner/#key=good-token';
   ok(A.w.LGUShared.canPublish(), 'editor link enables saving for everyone');
   A.w.eval("state.bookings = state.bookings.slice(0, 400); changed(true);"); await wait(300);
   ok(/for everyone/.test(await saveVia(A, 'Week of Dec 1 – first shared plan')), 'header "Save version" saves for everyone');
-  ok(repo.commits.length === 1 && JSON.parse(repo.commits[0].text).bookings.length === 400, 'GitHub holds the plan as a commit');
-  ok(repo.commits[0].author === 'Jason Wong', 'shared history shows the editor\'s name');
+  ok(planCommits().length === 1 && JSON.parse(planCommits()[0].text).bookings.length === 400, 'GitHub holds the plan as a commit');
+  ok(planCommits()[0].author === 'Jason Wong', 'shared history shows the editor\'s name');
   ok(!A.d.getElementById('quick-version').hidden, 'editor sees the Save version button');
   ok(!A.d.getElementById('version-table') && A.w.localStorage.getItem('lgu-field-planner-versions-v1') === null, 'no versions stored on the device');
   const editorAgain = browser(A.storage()); await wait(500);
@@ -126,16 +137,41 @@ const EDITOR = 'https://uiucwonger.github.io/lgu-field-planner/#key=good-token';
   C.w.eval("state.bookings = state.bookings.slice(0, 360); changed(true);"); await wait(300);
   C.w.confirm = q => (C.w.__lastConfirm = q, false);
   let msg = await saveVia(C, 'C declines');
-  ok(/was saved after you loaded/.test(C.w.__lastConfirm) && repo.commits[0].message === 'A saves first' && /still here/.test(msg) && bookings(C.w) === 360, 'second editor is warned; declining keeps their edits on screen, unsaved');
+  ok(/was saved after you loaded/.test(C.w.__lastConfirm) && planCommits()[0].message === 'A saves first' && /still here/.test(msg) && bookings(C.w) === 360, 'second editor is warned; declining keeps their edits on screen, unsaved');
   C.w.confirm = () => true;
   await saveVia(C, 'C saves anyway');
-  ok(repo.commits[0].message === 'C saves anyway' && repo.commits[1].message === 'A saves first', 'saving anyway keeps both versions in the shared history');
+  ok(planCommits()[0].message === 'C saves anyway' && planCommits()[1].message === 'A saves first', 'saving anyway keeps both versions in the shared history');
 
-  // 8. Offline / GitHub down: app still works
+  // 8. Delete versions (editors only)
+  const rowsOf = b => [...b.d.querySelectorAll('#shared-card .shared-table tbody tr')];
+  const titleOf = r => T(r.cells[2].querySelector('b'));
+  let V2 = browser(); await wait(600); V2.d.querySelector('[data-tab=history]').click(); await wait(100);
+  ok(!rowsOf(V2).some(r => /Delete/.test(T(r))), 'viewers have no Delete button');
+  let E = browser(A.storage()); await wait(600); E.d.querySelector('[data-tab=history]').click(); await wait(100);
+  const before = rowsOf(E).map(titleOf);
+  const older = rowsOf(E).find(r => titleOf(r) === 'Week of Dec 8');
+  [...older.querySelectorAll('button')].find(x => x.textContent === 'Delete').click(); await wait(600);
+  ok(!rowsOf(E).map(titleOf).includes('Week of Dec 8') && rowsOf(E).length === before.length - 1, 'Delete removes an older version from the list');
+  ok(JSON.parse(planCommits()[0].text).bookings.length === 360, 'deleting an older version leaves the shared plan unchanged');
+  // delete the latest -> previous visible version becomes the shared plan again
+  const latestTitle = titleOf(rowsOf(E)[0]), prevTitle = titleOf(rowsOf(E)[1]);
+  E.w.eval("state = JSON.parse(JSON.stringify(state)); changed(true);"); await wait(300);
+  [...rowsOf(E)[0].querySelectorAll('button')].find(x => x.textContent === 'Delete').click(); await wait(900);
+  ok(titleOf(rowsOf(E)[0]) === prevTitle && !rowsOf(E).map(titleOf).includes(latestTitle), `deleting the latest makes "${prevTitle}" the latest again`);
+  ok(JSON.parse(planCommits()[0].text).bookings.length === 370, 'shared plan file is restored to the previous version');
+  ok(!rowsOf(E).some(r => /^Delete “/.test(titleOf(r))), 'the restore step itself is hidden from the list');
+  V2 = browser(); await wait(700); V2.d.querySelector('[data-tab=history]').click(); await wait(100);
+  ok(bookings(V2.w) === 370 && !rowsOf(V2).map(titleOf).includes(latestTitle) && !rowsOf(V2).map(titleOf).includes('Week of Dec 8'), 'other people see the deletions and get the restored plan');
+  // can save again afterwards (no false conflict)
+  E.w.eval("state.bookings = state.bookings.slice(0, 365); changed(true);"); await wait(300);
+  ok(/for everyone/.test(await saveVia(E, 'After delete')), 'saving after a delete works');
+  const only = browser(); await wait(10);
+
+  // 9. Offline / GitHub down: app still works
   const D = browser(); D.w.fetch = () => Promise.reject(new Error('offline')); await wait(500);
   ok(D.d.querySelectorAll('.kpi').length >= 6, 'app still works if GitHub is unreachable');
 
-  const errs = [V, A, editorAgain, B, C, D].flatMap(b => b.errors);
+  const errs = [V, A, editorAgain, B, C, D, V2, E].flatMap(b => b.errors);
   ok(errs.length === 0, `no script errors${errs.length ? ': ' + errs[0] : ''}`);
   console.log(`\nShared-version tests passed (${passed} checks).`);
   process.exit(0);

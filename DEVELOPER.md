@@ -39,7 +39,8 @@ Requirements: any modern browser (Safari, Chrome, Edge, Firefox). Node 18+ for t
 | `board.js` | Drag-and-drop Board tab and the **Optimize** panel | `window.LGUBoard` |
 | `longterm.js` | **Long Term Planning** tab | `window.LGULongTerm`. Meeting-note content (owners, blockers, options) is hard-coded here |
 | `github-sync.js` | **Shared versions on GitHub** (Versions tab, top card + header banner) | `window.LGUShared`. See §10a |
-| `data/plan.json` | The shared plan (created by the first Publish) | Each publish is one commit, so the git history is the shared version history |
+| `data/plan.json` | The shared plan (created by the first Save version) | Each save is one commit, so the git history is the shared version history |
+| `data/deleted.json` | Versions hidden with *Delete* | Created by the first Delete. Remove an entry to bring a version back |
 | `logo.png` | LGU crest (header + favicon) | Hidden automatically if missing |
 | `tools/test-analysis.js` | Analysis unit tests | `npm test` |
 | `tools/test-ui.js` | UI smoke tests in jsdom | `npm run test:sync` | Shared versions against a fake GitHub API: first visit loads shared, auto-follow, local edits never overwritten, banner, history/compare/load, conflict blocking, offline | ~5 s, needs `npm install` |
@@ -345,6 +346,13 @@ No other code needs to know where data lives.
 
 **No device versions:** versions exist only on GitHub. The old `lgu-field-planner-versions-v1` storage key is removed on load. Safety nets: in-session Undo (50 steps, covers Optimize, import, reset and load), the current working plan autosaved in the browser, and *Export all data (JSON)*.
 4. **GitHub unreachable or rate-limited:** the app works from local data, and the card explains why.
+
+**Delete (editors):** each row in the shared history has *Delete*. Git history is never rewritten.
+- `data/deleted.json` lists the hidden commit shas, with who deleted them and when. The planner filters these out for everyone.
+- **Deleting the latest version** writes the previous version's exact file back as a new commit, and hides both the deleted version and that restore commit, so the previous version is the shared plan again.
+- **Can't delete the last remaining version.**
+- **To undo a delete,** remove its entry from `data/deleted.json` on GitHub.
+- Viewers read `deleted.json` from raw.githubusercontent.com, which doesn't count against the API rate limit.
 
 **Two editors:** before saving, the planner compares the file's current `sha` with the one this browser loaded. If someone saved in between, the editor sees whose version it was and chooses: save theirs as the newest version (both stay in the history), or cancel and keep working, with their edits still on screen. GitHub also rejects stale writes with 409.
 

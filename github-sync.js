@@ -98,7 +98,7 @@
     let text;
     if (file.content && file.encoding === 'base64') text = b64decode(file.content);
     else text = await (await fetch(file.download_url, { cache: 'no-store' })).text(); // > 1 MB files
-    return { data: JSON.parse(text), sha: file.sha, commit: cm.sha, message: cm.commit.message, date: cm.commit.author.date, author: cm.commit.author.name || (cm.author && cm.author.login) || '' };
+    return { text, data: JSON.parse(text), sha: file.sha, commit: cm.sha, message: cm.commit.message, date: cm.commit.author.date, author: cm.commit.author.name || (cm.author && cm.author.login) || '' };
   }
   async function listHistory(n = 30) {
     const c = cfg();
@@ -109,6 +109,56 @@
     try { return (await gh(`${repoPath(c)}/contents/${c.path.split('/').map(encodeURIComponent).join('/')}?ref=${encodeURIComponent(c.branch)}`)).sha; }
     catch (e) { if (e.status === 404) return null; throw e; }
   }
+  // ---- Deleted (hidden) versions: data/deleted.json lists commit shas hidden from the history.
+  // Git history itself is never rewritten; "Delete" hides a version for everyone.
+  const hiddenPath = () => cfg().path.replace(/[^/]+$/, 'deleted.json');
+  const contentsUrl = p => `${repoPath(cfg())}/contents/${p.split('/').map(encodeURIComponent).join('/')}`;
+  let hiddenList = [];      // [{ commit, message, by, at }]
+  let hiddenSha = null;     // blob sha of deleted.json (for updates)
+  async function fetchHidden() {
+    const c = cfg();
+    if (token()) {          // editors: API (exact, needed for updates)
+      try { const f = await gh(`${contentsUrl(hiddenPath())}?ref=${encodeURIComponent(c.branch)}`); hiddenSha = f.sha; return JSON.parse(b64decode(f.content)).hidden || []; }
+      catch (e) { if (e.status === 404) { hiddenSha = null; return []; } throw e; }
+    }
+    // viewers: raw file (doesn't count against the API rate limit)
+    const res = await fetch(`https://raw.githubusercontent.com/${c.owner}/${c.repo}/${c.branch}/${hiddenPath()}?t=${Date.now()}`, { cache: 'no-store' });
+    if (res.status === 404) return [];
+    if (!res.ok) throw new Error(`deleted list ${res.status}`);
+    return (await res.json()).hidden || [];
+  }
+  async function writeHidden(list, message) {
+    const body = { message, branch: cfg().branch, author: { name: editorName() || 'LGU editor', email: 'field-planner@losgatosunited.invalid' },
+      content: b64encode(JSON.stringify({ note: 'Versions hidden from the Field Planner history. Remove an entry to bring a version back.', hidden: list }, null, 1)) };
+    if (hiddenSha) body.sha = hiddenSha;
+    const r = await gh(contentsUrl(hiddenPath()), { method: 'PUT', body: JSON.stringify(body) }, true);
+    hiddenSha = r.content.sha; hiddenList = list;
+  }
+  const isHidden = sha => hiddenList.some(x => x.commit === sha);
+  const visibleHistory = () => (history || []).filter(cm => !isHidden(cm.sha));
+
+  /** Delete (hide) a shared version. Deleting the latest restores the previous version as the shared plan. */
+  async function deleteVersion(cm) {
+    if (!token()) throw new Error('Only editors can delete versions.');
+    hiddenList = await fetchHidden();
+    const vis = visibleHistory(); const title = cm.commit.message.split('\n')[0];
+    if (vis.length <= 1) throw new Error("This is the only shared version, so it can't be deleted.");
+    const add = [{ commit: cm.sha, message: title, by: editorName() || 'LGU editor', at: new Date().toISOString() }];
+    if (vis[0].sha === cm.sha) {
+      // Latest: put the previous version's exact file back, then hide both the deleted version and this restore commit.
+      const prev = await fetchAt(vis[1]);
+      const body = { message: `Delete “${title}” (restores “${prev.message.split('\n')[0]}”)`, branch: cfg().branch,
+        author: { name: editorName() || 'LGU editor', email: 'field-planner@losgatosunited.invalid' }, content: b64encode(prev.text) };
+      const cur = await currentSha(); if (cur) body.sha = cur;
+      const r = await gh(contentsUrl(cfg().path), { method: 'PUT', body: JSON.stringify(body) }, true);
+      add.push({ commit: r.commit.sha, message: body.message, by: add[0].by, at: add[0].at, restore: true });
+      await writeHidden(hiddenList.concat(add), `Hide version “${title}”`);
+      return { restored: prev, blobSha: r.content.sha };
+    }
+    await writeHidden(hiddenList.concat(add), `Hide version “${title}”`);
+    return { restored: null };
+  }
+
   async function publish(message, { author = editorName() || 'LGU editor', force = false } = {}) {
     const c = cfg();
     if (!token()) throw new Error('This device has view-only access. Open the editor link to save shared versions.');
@@ -188,11 +238,12 @@
 
   function historyTable() {
     if (!history) return null;
-    if (!history.length) return h('p', { class: 'hint', text: 'Nothing published yet. An editor can publish the current plan to create the first shared version.' });
+    const list = visibleHistory();
+    if (!list.length) return h('p', { class: 'hint', text: 'Nothing published yet. An editor can publish the current plan to create the first shared version.' });
     const s = sync();
     return h('div', { class: 'scroller short' }, h('table', { class: 'shared-table' },
       h('thead', {}, h('tr', {}, ['Published', 'By', 'Message', ''].map(x => h('th', { text: x })))),
-      h('tbody', {}, history.map((cm, i) => h('tr', { class: cm.sha === s.commit ? 'is-current' : '' },
+      h('tbody', {}, list.map((cm, i) => h('tr', { class: cm.sha === s.commit ? 'is-current' : '' },
         h('td', { text: fmt(cm.commit.author.date) }),
         h('td', { text: cm.commit.author.name || (cm.author && cm.author.login) || '' }),
         h('td', {}, h('b', { text: cm.commit.message.split('\n')[0] }), i === 0 ? h('span', { class: 'manual', text: 'latest' }) : null, cm.sha === s.commit ? h('span', { class: 'manual', text: 'you have this' }) : null),
@@ -200,7 +251,29 @@
           h('button', { class: 'btn mini', text: 'Compare', onclick: () => withRemote(cm, r => LGUVersions.compareStates(state, r.data, `Your plan → shared “${r.message}” (${fmt(r.date)})`)) }),
           h('button', { class: 'btn mini', text: 'Load', onclick: () => withRemote(cm, r => confirmLoad(r)) }),
           h('button', { class: 'btn mini', text: 'Download', onclick: () => withRemote(cm, r => download(`lgu-shared-${r.date.slice(0, 10)}-${cm.sha.slice(0, 7)}.json`, JSON.stringify(r.data, null, 2), 'application/json')) }),
-          h('a', { class: 'btn mini', href: cm.html_url, target: '_blank', rel: 'noopener', text: 'On GitHub' })))))));
+          h('a', { class: 'btn mini', href: cm.html_url, target: '_blank', rel: 'noopener', text: 'On GitHub' }),
+          token() && list.length > 1 ? h('button', { class: 'btn mini danger', title: 'Delete this version for everyone', text: 'Delete', onclick: () => doDelete(cm, i === 0) }) : null))))));
+  }
+  async function doDelete(cm, isLatest) {
+    const title = cm.commit.message.split('\n')[0];
+    const vis = visibleHistory();
+    const msg = isLatest
+      ? `Delete “${title}” for everyone?\n\nIt's the latest version, so the previous one (“${vis[1].commit.message.split('\n')[0]}”) becomes the shared plan again.`
+      : `Delete “${title}” for everyone?\n\nIt disappears from the history list. (GitHub still keeps a record, so it can be recovered if needed.)`;
+    if (!confirm(msg)) return;
+    try {
+      setStatus('busy', `Deleting “${title}”…`);
+      const wasDirty = dirty(), hadIt = sync().commit === cm.sha;
+      const r = await deleteVersion(cm);
+      if (r.restored && hadIt) {
+        if (!wasDirty) load(r.restored);   // follow the shared plan back (undoable)
+        setSync({ sha: r.blobSha, commit: r.restored.commit, message: r.restored.message, date: r.restored.date, author: r.restored.author });
+      }
+      await refresh(true);
+      setStatus('ok', r.restored ? `Deleted “${title}”. “${r.restored.message.split('\n')[0]}” is the shared plan again.` : `Deleted “${title}”.`);
+    } catch (e) {
+      setStatus('error', `Couldn't delete: ${e.message}`);
+    }
   }
   async function withRemote(cm, fn) {
     try { setStatus('busy', 'Loading from GitHub…'); const r = await fetchAt(cm); setStatus('idle', ''); fn(r); }
@@ -271,7 +344,9 @@
     try {
       if (!quiet) setStatus('busy', 'Checking GitHub…');
       history = await listHistory();
-      latest = history.length ? await fetchAt(history[0]) : null;
+      try { hiddenList = await fetchHidden(); } catch (e) { /* keep the last known list */ }
+      const vis = visibleHistory();
+      latest = vis.length ? await fetchAt(vis[0]) : null;
       if (!quiet) setStatus('idle', latest ? '' : 'No shared plan published yet.');
       else paint();
       return latest;
@@ -299,5 +374,5 @@
   renderHooks.push(() => { if (currentTab === 'history') paint(); else banner(); });
   paint();
 
-  window.LGUShared = { refresh, publish, saveShared, canPublish, fetchLatest, listHistory, cfg, hash, dirty };
+  window.LGUShared = { refresh, publish, saveShared, deleteVersion, canPublish, fetchLatest, listHistory, cfg, hash, dirty };
 })();
