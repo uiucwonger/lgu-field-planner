@@ -389,11 +389,117 @@ a.btn{text-decoration:none;display:inline-block}
 /* ---- Version credit next to the title ---- */
 .app-version{font-size:12px;font-weight:500;letter-spacing:.02em;color:#bdbdbd;margin-left:8px;vertical-align:middle;white-space:nowrap}
 
-/* ---- Versions tab: device copies (collapsed) ---- */
-.device-copies>summary{cursor:pointer;display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;list-style:none}
-.device-copies>summary::-webkit-details-marker{display:none}
-.device-copies>summary h2{margin:0;display:inline}
-.device-copies>summary h2::before{content:'▸ ';color:var(--muted)}
-.device-copies[open]>summary h2::before{content:'▾ '}
 .btn.mini.danger{color:#8f2a2a;border-color:#e3b4b4}
 .btn.mini.danger:hover{background:#fbeeee}
+
+/* =====================================================================
+   Phone & small-tablet layout (≤ 700 px). Desktop is unchanged.
+   Tables keep their columns and scroll sideways inside their card;
+   everything else stacks into one column with touch-sized controls.
+   ===================================================================== */
+@media (max-width: 700px) {
+  html { -webkit-text-size-adjust: 100%; }
+  body { font-size: 15px; }
+  .wrap { width: calc(100% - 20px); }
+  main.wrap { padding-bottom: 24px; }
+
+  /* Header: logo + title on one row, actions in a tidy row below */
+  .mast { padding: 10px 0 8px; }
+  .mast-row { align-items: center; gap: 8px; }
+  .brand { gap: 10px; }
+  .brand .logo { height: 44px; }
+  .eyebrow { font-size: 9.5px; letter-spacing: .08em; }
+  h1 { font-size: 21px; line-height: 1.15; }
+  .app-version { display: block; margin: 2px 0 0; font-size: 10.5px; }
+  .mast-meta { width: 100%; flex-wrap: wrap; gap: 6px 8px; font-size: 12px; }
+  .mast-meta label { display: flex; align-items: center; }
+  .mast-meta input { padding: 6px 6px; font-size: 14px; }
+  .hbtn { padding: 7px 10px; font-size: 13px; }
+  .save-state { flex-basis: 100%; min-width: 0; font-size: 12px; }
+
+  /* Tabs: one swipeable row, with a fade hinting there's more */
+  .tabs { scroll-snap-type: x proximity; -webkit-overflow-scrolling: touch; scrollbar-width: none;
+          mask-image: linear-gradient(90deg, #000 88%, transparent); -webkit-mask-image: linear-gradient(90deg, #000 88%, transparent); }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tabs button { padding: 11px 11px; font-size: 14px; scroll-snap-align: start; }
+  .tab-divider { padding: 0 2px; }
+
+  /* Cards & grids: single column, less padding */
+  .card { padding: 12px; border-radius: 8px; margin-bottom: 12px; }
+  .grid2 { grid-template-columns: 1fr; gap: 0; }
+  h2 { font-size: 17px; }
+  .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .kpi { padding: 9px 10px; }
+  .kpi .v { font-size: 21px; }
+  .kpi .l { font-size: 10.5px; }
+
+  /* Controls & forms: full-width, finger-sized */
+  .controls { gap: 8px; }
+  .controls > label, .controls > input, .controls > select { flex: 1 1 100%; }
+  .controls label:has(input[type=checkbox]) { flex: 0 1 auto; }
+  input, select, textarea, .btn { font-size: 16px; }          /* 16px stops iOS zooming into fields */
+  .btn { padding: 8px 12px; }
+  .btn.mini { font-size: 13px; padding: 6px 9px; }
+  .form label { max-width: none; }
+
+  /* Tables: keep columns, scroll sideways within the card */
+  .scroller { max-height: none; -webkit-overflow-scrolling: touch; }
+  .scroller.short { max-height: 60vh; }
+  table { font-size: 13px; }
+  th, td { padding: 6px 7px; }
+  table.edit td.name { min-width: 150px; max-width: 170px; }
+  .row-actions { white-space: normal; display: flex; flex-wrap: wrap; gap: 4px; }
+  .row-actions .btn { margin: 0; }
+
+  /* Board: tray above the grid; grid scrolls sideways with the field column pinned */
+  .board-layout { grid-template-columns: 1fr; }
+  .tray-card { position: static; max-height: 40vh; }
+  .board-scroll { max-height: 70vh; }
+  .brow-head { min-width: 128px; max-width: 150px; font-size: 12px; }
+  .editor { left: 10px; right: 10px; bottom: 10px; width: auto; max-height: 80vh; overflow: auto; }
+  .opt-cols { grid-template-columns: 1fr; }
+  .opt-actions { width: 100%; }
+  .opt-actions .btn { flex: 1; }
+
+  /* Shared versions card & banner */
+  .shared-banner { font-size: 13px; }
+  .shared-banner .btn { flex: 1 1 auto; }
+  .shared-card .lt-section-head a { font-size: 11px; word-break: break-all; }
+  .shared-table { min-width: 560px; }
+  .shared-editor .controls .btn { flex: 1 1 100%; }
+
+  /* Long Term Planning */
+  .lt-focus-row { grid-template-columns: 1fr; }
+  .lt-item { grid-template-columns: 26px 1fr; gap: 8px; padding: 10px; }
+  .lt-rank { width: 24px; height: 24px; font-size: 13px; }
+  .lt-metric { grid-column: 2; text-align: left; display: flex; align-items: baseline; gap: 6px; }
+  .lt-metric .v { font-size: 22px; }
+  .lt-facts { grid-template-columns: 1fr; gap: 0; }
+  .lt-facts dt { margin-top: 6px; font-size: 12px; }
+  .lt-cap { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .lt-track { flex-direction: column; align-items: stretch; gap: 6px; }
+  .lt-track label { display: grid; gap: 2px; }
+  .lt-track input:not([type=date]), .lt-track select, .lt-track input[type=date] { width: 100%; }
+  .lt-assume-row { gap: 8px; }
+  .lt-assume-row label { flex: 1 1 45%; }
+  .lt-member-table { min-width: 620px; }
+  .lt-members { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+  /* Compare / diff */
+  .diff-kpis { flex-direction: column; gap: 2px; }
+}
+
+/* Very small phones (iPhone SE / mini) */
+@media (max-width: 380px) {
+  .kpis { grid-template-columns: 1fr 1fr; }
+  .kpi .v { font-size: 19px; }
+  h1 { font-size: 19px; }
+  .tabs button { padding: 10px 9px; font-size: 13.5px; }
+  .lt-cap { grid-template-columns: 1fr 1fr; }
+}
+
+/* Touch devices: no hover-only affordances, bigger hit areas */
+@media (hover: none) and (pointer: coarse) {
+  .lt-day { padding: 6px 9px; }
+  .bcard { min-height: 34px; }
+}
