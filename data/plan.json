@@ -6659,6 +6659,20 @@
  ],
  "longTerm": {
   "track": {},
-  "assume": {}
+  "assume": {
+   "hockey": {
+    "surface": "Turf",
+    "lights": "Yes",
+    "teams": 4,
+    "days": [
+     "Mon",
+     "Tue",
+     "Wed",
+     "Thu",
+     "Fri"
+    ],
+    "window": "18:00–19:15"
+   }
+  }
  }
 }
