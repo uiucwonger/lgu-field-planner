@@ -28,7 +28,7 @@ function fakeFetch(url, opts = {}) {
     if (!ok) return json(401, { message: 'Bad credentials' });
     const body = JSON.parse(opts.body); const head = repo.commits[0];
     if (head && body.sha !== head.fileSha) return json(409, { message: 'is at ' + head.fileSha + ' but expected ' + body.sha });
-    const c = { sha: sha(), fileSha: sha(), message: body.message, author: 'uiucwonger', date: new Date(Date.now() + n * 1000).toISOString(), text: Buffer.from(body.content, 'base64').toString('utf8') };
+    const c = { sha: sha(), fileSha: sha(), message: body.message, author: (body.author && body.author.name) || 'uiucwonger', date: new Date(Date.now() + n * 1000).toISOString(), text: Buffer.from(body.content, 'base64').toString('utf8') };
     repo.commits.unshift(c);
     return json(201, { content: { sha: c.fileSha }, commit: { sha: c.sha, author: { name: c.author, date: c.date } } });
   }
@@ -36,7 +36,7 @@ function fakeFetch(url, opts = {}) {
 }
 
 // ---------------- a "browser"
-function browser(storage = {}) {
+function browser(storage = {}, url = 'https://uiucwonger.github.io/lgu-field-planner/') {
   const errors = [], vc = new VirtualConsole();
   vc.on('jsdomError', e => { if (!/requestAnimationFrame/.test(e.message)) errors.push(e.message); });
   let html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
@@ -44,44 +44,45 @@ function browser(storage = {}) {
   const pre = `<script>${Object.entries(storage).map(([k, v]) => `localStorage.setItem(${JSON.stringify(k)},${JSON.stringify(v).replace(/</g, '\\u003c')});`).join('')}</script>`;
   html = html.replace(/<script defer src="[^"]+"><\/script>/g, '').replace('<body>', '<body>' + pre)
     .replace('</body>', () => scripts.map(f => `<script>${fs.readFileSync(path.join(root, f), 'utf8')}</script>`).join('\n') + '</body>');
-  const w = new JSDOM(html, { runScripts: 'dangerously', virtualConsole: vc, url: 'https://uiucwonger.github.io/lgu-field-planner/', pretendToBeVisual: true,
+  const w = new JSDOM(html, { runScripts: 'dangerously', virtualConsole: vc, url, pretendToBeVisual: true,
     beforeParse(win) { win.fetch = fakeFetch; win.TextEncoder = TextEncoder; win.TextDecoder = TextDecoder; } }).window;
-  w.confirm = () => true; w.alert = m => { w.__alert = m; }; w.HTMLElement.prototype.scrollIntoView = function () {};
+  w.confirm = () => true; w.alert = m => { w.__alert = m; }; w.prompt = (q, d) => /^Your name/.test(q) ? 'Jason Wong' : (w.__nextName || d); w.HTMLElement.prototype.scrollIntoView = function () {};
   return { w, d: w.document, errors, storage: () => Object.fromEntries(Object.keys(w.localStorage).map(k => [k, w.localStorage.getItem(k)])) };
 }
 const wait = ms => new Promise(r => setTimeout(r, ms));
 const T = e => (e ? e.textContent.replace(/\s+/g, ' ').trim() : '');
 let passed = 0; const ok = (c, m) => { assert.ok(c, m); passed++; console.log(`  ✓ ${m}`); };
 const bookings = w => w.eval('state.bookings.length');
-async function publishVia(b, msg) {
+async function saveVia(b, name) {
+  b.w.__nextName = name;
+  b.d.getElementById('quick-version').click();
+  await wait(500);
   b.d.querySelector('[data-tab=history]').click(); await wait(100);
-  b.d.getElementById('pub-msg').value = msg;
-  [...b.d.querySelectorAll('#shared-card button')].find(x => x.textContent === 'Publish to GitHub').click();
-  await wait(400);
   return T(b.d.querySelector('#shared-card .shared-status'));
 }
-async function signIn(b, t) {
-  b.d.querySelector('[data-tab=history]').click(); await wait(80);
-  b.d.getElementById('gh-token').value = t;
-  [...b.d.querySelectorAll('#shared-card button')].find(x => x.textContent === 'Save token').click(); await wait(300);
-  return T(b.d.querySelector('#shared-card .shared-status'));
-}
+const EDITOR = 'https://uiucwonger.github.io/lgu-field-planner/#key=good-token';
 
 (async () => {
-  // 1. Nothing published yet: visitor works from the seed, no errors
-  let A = browser(); await wait(500);
-  ok(A.w.LGUShared.cfg().owner === 'uiucwonger' && A.w.LGUShared.cfg().repo === 'lgu-field-planner', 'repo detected from the github.io address');
-  A.d.querySelector('[data-tab=history]').click(); await wait(100);
-  ok(/Nothing published yet/.test(T(A.d.getElementById('shared-card'))), 'empty repo: "Nothing published yet"');
-  ok(!A.d.getElementById('pub-msg'), 'no Publish button before signing in');
+  // 1. View-only visitor (plain link): nothing published yet, Save version stays on the device
+  let V = browser(); await wait(500);
+  ok(V.w.LGUShared.cfg().owner === 'uiucwonger' && V.w.LGUShared.cfg().repo === 'lgu-field-planner', 'repo detected from the github.io address');
+  V.d.querySelector('[data-tab=history]').click(); await wait(100);
+  ok(/View only/.test(T(V.d.getElementById('shared-card'))) && /Nothing published yet/.test(T(V.d.getElementById('shared-card'))), 'plain link = view only; "Nothing published yet"');
+  ok(!/token/i.test(T(V.d.getElementById('shared-card'))), 'no token box or token wording anywhere');
+  await saveVia(V, 'viewer draft');
+  ok(repo.commits.length === 0 && V.w.LGUVersions.loadVersions().some(v => v.name === 'viewer draft'), 'view-only Save version stays on the device');
 
-  // 2. Editor A signs in (bad token rejected, good accepted) and publishes
-  ok(/not accepted/.test(await signIn(A, 'bad-token')), 'bad token is rejected');
-  ok(/Signed in/.test(await signIn(A, 'good-token')), 'good token is accepted');
+  // 2. Editor link: no setup, Save version saves for everyone
+  let A = browser({}, EDITOR); await wait(500);
+  ok(A.w.location.hash === '' && !A.w.location.href.includes('good-token'), 'key is removed from the address bar');
+  ok(A.w.LGUShared.canPublish(), 'editor link enables saving for everyone');
   A.w.eval("state.bookings = state.bookings.slice(0, 400); changed(true);"); await wait(300);
-  ok(/Published/.test(await publishVia(A, 'Week of Dec 1 – first shared plan')), 'editor publishes the first shared version');
+  ok(/for everyone/.test(await saveVia(A, 'Week of Dec 1 – first shared plan')), 'header "Save version" saves for everyone');
   ok(repo.commits.length === 1 && JSON.parse(repo.commits[0].text).bookings.length === 400, 'GitHub holds the plan as a commit');
-  ok(A.w.LGUVersions.loadVersions().some(v => /^Published:/.test(v.name)), 'publish also keeps a local version');
+  ok(repo.commits[0].author === 'Jason Wong', 'shared history shows the editor\'s name');
+  ok(A.w.LGUVersions.loadVersions().some(v => v.name === 'Week of Dec 1 – first shared plan'), 'a copy is also kept on the device');
+  const editorAgain = browser(A.storage()); await wait(500);
+  ok(editorAgain.w.LGUShared.canPublish(), 'editor stays an editor on later visits with the plain link');
 
   // 3. New visitor B (fresh browser) gets the shared plan automatically
   let B = browser(); await wait(600);
@@ -91,7 +92,7 @@ async function signIn(b, t) {
 
   // 4. A publishes again; returning visitor B (no local edits) follows automatically
   A.w.eval("state.bookings = state.bookings.slice(0, 390); changed(true);"); await wait(300);
-  await publishVia(A, 'Week of Dec 8');
+  await saveVia(A, 'Week of Dec 8');
   B = browser(bStore); await wait(600);
   ok(bookings(B.w) === 390, 'returning visitor with no edits auto-updates to the latest shared version');
 
@@ -99,7 +100,7 @@ async function signIn(b, t) {
   B.w.eval("state.bookings = state.bookings.slice(0, 380); changed(true);"); await wait(400);
   const bEdited = B.storage();
   A.w.eval("state.bookings = state.bookings.slice(0, 385); changed(true);"); await wait(300);
-  await publishVia(A, 'Week of Dec 15');
+  await saveVia(A, 'Week of Dec 15');
   B = browser(bEdited); await wait(600);
   ok(bookings(B.w) === 380, 'local unpublished edits are NOT overwritten');
   ok(!B.d.getElementById('shared-banner').hidden && /newer shared plan/.test(T(B.d.getElementById('shared-banner'))), 'banner offers the newer shared plan');
@@ -116,20 +117,23 @@ async function signIn(b, t) {
   [...rows[2].querySelectorAll('button')].find(x => x.textContent === 'Load').click(); await wait(400);
   ok(bookings(B.w) === 400, 'load an older shared version (400 bookings)');
 
-  // 7. Conflict: two editors, second one is stale
-  const aStore = A.storage();
-  let C = browser(Object.assign({}, aStore)); await wait(600);        // editor C, same token, synced to latest
+  // 7. Two editors: the second is warned and can choose; nothing is lost either way
+  let C = browser(A.storage()); await wait(600);
   A.w.eval("state.bookings = state.bookings.slice(0, 370); changed(true);"); await wait(300);
-  await publishVia(A, 'A publishes first');
+  await saveVia(A, 'A saves first');
   C.w.eval("state.bookings = state.bookings.slice(0, 360); changed(true);"); await wait(300);
-  const msg = await publishVia(C, 'C publishes stale');
-  ok(/newer shared version/.test(msg) && repo.commits[0].message === 'A publishes first', 'stale editor is blocked instead of overwriting the other editor');
+  C.w.confirm = q => (C.w.__lastConfirm = q, false);
+  let msg = await saveVia(C, 'C declines');
+  ok(/was saved after you loaded/.test(C.w.__lastConfirm) && repo.commits[0].message === 'A saves first' && /device only/.test(msg), 'second editor is warned; declining keeps theirs on the device only');
+  C.w.confirm = () => true;
+  await saveVia(C, 'C saves anyway');
+  ok(repo.commits[0].message === 'C saves anyway' && repo.commits[1].message === 'A saves first', 'saving anyway keeps both versions in the shared history');
 
   // 8. Offline / GitHub down: app still works
   const D = browser(); D.w.fetch = () => Promise.reject(new Error('offline')); await wait(500);
   ok(D.d.querySelectorAll('.kpi').length >= 6, 'app still works if GitHub is unreachable');
 
-  const errs = [A, B, C, D].flatMap(b => b.errors);
+  const errs = [V, A, editorAgain, B, C, D].flatMap(b => b.errors);
   ok(errs.length === 0, `no script errors${errs.length ? ': ' + errs[0] : ''}`);
   console.log(`\nShared-version tests passed (${passed} checks).`);
   process.exit(0);

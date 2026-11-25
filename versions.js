@@ -184,13 +184,16 @@
   $('cmp-go').addEventListener('click', showDiff);
 
   // ------------------------------------------------------------ wiring
+  // Editors (opened the editor link) save for everyone via GitHub; others save on this device.
+  const shared = () => window.LGUShared && window.LGUShared.canPublish();
+  const save = (name, note) => shared() ? window.LGUShared.saveShared(name || `Version ${new Date().toLocaleDateString()}`, note) : saveVersion(name, note);
   $('ver-save').addEventListener('click', () => {
-    saveVersion($('ver-name').value.trim(), $('ver-note').value.trim());
+    save($('ver-name').value.trim(), $('ver-note').value.trim());
     $('ver-name').value = ''; $('ver-note').value = '';
   });
   $('quick-version').addEventListener('click', () => {
     const name = prompt('Name this version', `Version ${new Date().toLocaleDateString()}`);
-    if (name !== null) saveVersion(name.trim());
+    if (name !== null) save(name.trim());
   });
   renderHooks.push(() => { if (currentTab === 'history') renderVersions(); else updateButtons(); });
   renderVersions();

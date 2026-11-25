@@ -3,8 +3,10 @@
  * The plan everyone sees lives in the repository as  data/plan.json.
  * Every "Publish" is a git commit to that file, so GitHub keeps the full shared history:
  *   - Anyone opening the site can READ the latest plan and every earlier version (public repo, no sign-in).
- *   - Editors PUBLISH with a fine-grained personal access token (Contents: read & write on this repo only).
- *     The token is stored only in the editor's own browser.
+ *   - Editors get an EDITOR LINK:  https://<owner>.github.io/<repo>/#key=<token>
+ *     Opening it once enables "Save version" → GitHub on that device (the key is remembered and removed
+ *     from the address bar). The #key part is never sent to the web server. <token> is one fine-grained
+ *     token created by the repo owner (this repo only, Contents: Read and write).
  *
  * Reads use the GitHub REST API: 2 requests per page load (history + latest file). Without a token, GitHub
  * allows 60 requests/hour per network, i.e. ~30 page loads/hour from one location. Editors (with a token)
@@ -26,6 +28,25 @@
   const CFG_KEY = 'lgu-github-config-v1';       // { owner, repo, branch, path }
   const TOKEN_KEY = 'lgu-github-token-v1';      // editor's token (this browser only)
   const SYNC_KEY = 'lgu-github-sync-v1';        // { sha, commit, message, date, author, baseHash }
+  const NAME_KEY = 'lgu-editor-name-v1';        // editor's display name for the shared history
+
+  // Editor link: take the key from #key=… (or ?key=…), remember it, and clean the address bar.
+  let keyJustAdded = false;
+  (() => {
+    const read = s => new URLSearchParams(s.replace(/^[#?]/, '')).get('key');
+    const k = read(location.hash) || read(location.search);
+    if (!k) return;
+    try { localStorage.setItem(TOKEN_KEY, k.trim()); keyJustAdded = true; } catch (e) { /* storage blocked */ }
+    try { window.history.replaceState(null, '', location.pathname + location.search.replace(/[?&]key=[^&]*/, '')); } catch (e) { /* ignore */ }
+  })();
+  const editorName = () => { try { return localStorage.getItem(NAME_KEY) || ''; } catch (e) { return ''; } };
+  function askName() {
+    let n = editorName();
+    if (n) return n;
+    n = (prompt('Your name (shown with your versions in the shared history):', '') || '').trim();
+    if (n) try { localStorage.setItem(NAME_KEY, n); } catch (e) { /* ignore */ }
+    return n || 'LGU editor';
+  }
   const API = 'https://api.github.com';
 
   const cfg = () => Object.assign({}, DEFAULT_REPO, readJSON(CFG_KEY) || {});
@@ -88,16 +109,17 @@
     try { return (await gh(`${repoPath(c)}/contents/${c.path.split('/').map(encodeURIComponent).join('/')}?ref=${encodeURIComponent(c.branch)}`)).sha; }
     catch (e) { if (e.status === 404) return null; throw e; }
   }
-  async function publish(message) {
+  async function publish(message, { author = editorName() || 'LGU editor', force = false } = {}) {
     const c = cfg();
-    if (!token()) throw new Error('Add an editor token first (Versions → Shared versions → Editor sign-in).');
+    if (!token()) throw new Error('This device has view-only access. Open the editor link to save shared versions.');
     const s = sync();
     const remoteSha = await currentSha();
-    if (remoteSha && s.sha && remoteSha !== s.sha) {
-      const e = new Error('Someone published a newer shared version after you loaded yours. Load the latest shared version (your work is kept as a local version), re-apply your changes, then publish.');
+    if (remoteSha && s.sha && remoteSha !== s.sha && !force) {
+      const e = new Error('Someone saved a newer shared version after you loaded yours.');
       e.status = 409; throw e;
     }
     const body = { message: message || `Plan update ${new Date().toLocaleDateString()}`, branch: c.branch,
+      author: { name: author, email: 'field-planner@losgatosunited.invalid' },
       content: b64encode(JSON.stringify(state, null, 1)) };
     if (remoteSha) body.sha = remoteSha;
     const r = await gh(`${repoPath(c)}/contents/${c.path.split('/').map(encodeURIComponent).join('/')}`, { method: 'PUT', body: JSON.stringify(body) }, true);
@@ -148,18 +170,17 @@
     card.replaceChildren(
       h('div', { class: 'lt-section-head' }, h('h2', { text: 'Shared versions (GitHub)' }),
         h('a', { href: `${repoUrl}/commits/${c.branch}/${c.path}`, target: '_blank', rel: 'noopener', class: 'muted', text: `${c.owner}/${c.repo} · ${c.path}` })),
-      h('p', { class: 'hint', text: 'Everyone who opens this site sees the shared plan. Each Publish is saved on GitHub as a new version with who, when and a message, and the full history is kept. Editing still happens on your device until you publish.' }),
-      h('p', {}, ...where),
+      h('p', { class: 'hint', text: signedIn
+        ? 'You can edit. Click Save version (top right or below) and your version is saved on GitHub for everyone, with your name and the time. Every version is kept.'
+        : 'View-only on this device. You can explore and try changes here, but versions you save stay on this device. Open the editor link to save versions for everyone.' }),
+      h('p', {}, h('span', { class: `lt-chip ${signedIn ? 'ok' : 'low'}`, text: signedIn ? `Editor${editorName() ? ` · ${editorName()}` : ''}` : 'View only' }), ' ', ...where),
       status.text ? h('p', { class: `shared-status ${status.kind}`, text: status.text }) : null,
       h('div', { class: 'controls' },
+        signedIn ? h('button', { class: 'btn primary', text: 'Save version', onclick: () => saveFromPrompt() }) : null,
         h('button', { class: 'btn', text: 'Check for updates', onclick: refresh }),
-        latest ? h('button', { class: 'btn', text: 'Load latest shared', onclick: () => confirmLoad(latest) }) : null,
-        signedIn
-          ? [h('input', { id: 'pub-msg', placeholder: 'What changed? e.g. "Week of Dec 1 – Westmont renewed"', size: 46 }),
-             h('button', { class: 'btn primary', text: 'Publish to GitHub', onclick: doPublish })]
-          : null),
+        latest ? h('button', { class: 'btn', text: 'Load latest shared', onclick: () => confirmLoad(latest) }) : null),
       historyTable(),
-      editorBox());
+      signedIn ? editorBox() : null);
   }
 
   function historyTable() {
@@ -183,42 +204,62 @@
     catch (e) { setStatus('error', `Couldn't load that version: ${e.message}`); }
   }
 
+  /** Editor tools: share the editor link, change display name, stop editing on this device. */
   function editorBox() {
-    const c = cfg();
-    const signedIn = !!token();
-    return h('details', { class: 'shared-editor', open: false },
-      h('summary', { text: signedIn ? 'Editor sign-in: token saved on this device' : 'Editor sign-in (to publish)' }),
-      h('ol', { class: 'hint' },
-        h('li', {}, 'On GitHub, open ', h('a', { href: 'https://github.com/settings/personal-access-tokens/new', target: '_blank', rel: 'noopener', text: 'Settings → Developer settings → Fine-grained tokens → Generate new token' }), '.'),
-        h('li', { text: `Repository access: Only select repositories → ${c.owner}/${c.repo}. Permissions → Contents: Read and write. Set an expiry (e.g. 90 days).` }),
-        h('li', { text: 'Paste the token below. It stays in this browser only and is sent only to api.github.com. Don\'t use a shared or public computer.' })),
+    const link = `${location.origin}${location.pathname}#key=${encodeURIComponent(token())}`;
+    return h('details', { class: 'shared-editor' },
+      h('summary', { text: 'Editor options' }),
+      h('p', { class: 'hint', text: 'Anyone who opens the editor link can save versions for everyone. Share it only with people who should edit, and not in public places.' }),
       h('div', { class: 'controls' },
-        h('input', { id: 'gh-token', type: 'password', placeholder: signedIn ? '•••••••• (saved)' : 'github_pat_…', size: 40, autocomplete: 'off' }),
-        h('button', { class: 'btn', text: 'Save token', onclick: async () => {
-          const t = $('gh-token').value.trim(); if (!t) return;
-          try { localStorage.setItem(TOKEN_KEY, t); } catch (e) { /* ignore */ }
-          try { const r = await gh(repoPath(cfg()), {}, true); if (!(r.permissions && (r.permissions.push || r.permissions.admin))) throw new Error('This token can read but not publish. Give it Contents: Read and write on this repository.'); setStatus('ok', `Signed in. You can publish to ${cfg().owner}/${cfg().repo}.`); }
-          catch (e) { try { localStorage.removeItem(TOKEN_KEY); } catch (x) { /* ignore */ } setStatus('error', `Token not accepted: ${e.message}`); }
+        h('button', { class: 'btn', text: 'Copy editor link', onclick: async () => {
+          try { await navigator.clipboard.writeText(link); setStatus('ok', 'Editor link copied. Send it to the people who should edit.'); }
+          catch (e) { prompt('Copy the editor link:', link); }
         } }),
-        signedIn ? h('button', { class: 'btn', text: 'Sign out', onclick: () => { try { localStorage.removeItem(TOKEN_KEY); } catch (e) { /* ignore */ } setStatus('idle', 'Signed out on this device.'); } }) : null),
-      h('details', { class: 'hint' }, h('summary', { text: 'Repository settings' }),
-        h('div', { class: 'controls' },
-          ...['owner', 'repo', 'branch', 'path'].map(k => h('label', {}, `${k} `, h('input', { value: c[k], size: k === 'path' ? 16 : 14, onchange: e => { const x = readJSON(CFG_KEY) || {}; x[k] = e.target.value.trim(); writeJSON(CFG_KEY, x); refresh(); } }))))));
+        h('button', { class: 'btn', text: editorName() ? `Change name (${editorName()})` : 'Set your name', onclick: () => {
+          const n = (prompt('Your name (shown with your versions in the shared history):', editorName()) || '').trim();
+          if (n) { try { localStorage.setItem(NAME_KEY, n); } catch (e) { /* ignore */ } paint(); }
+        } }),
+        h('button', { class: 'btn', text: 'Stop editing on this device', onclick: () => {
+          if (!confirm('Switch this device to view-only? You can open the editor link again later.')) return;
+          try { localStorage.removeItem(TOKEN_KEY); } catch (e) { /* ignore */ }
+          setStatus('idle', 'This device is now view-only.');
+        } })));
   }
 
-  async function doPublish() {
-    const msg = ($('pub-msg') || {}).value?.trim();
-    if (!msg) { alert('Add a short message describing what changed. It appears in the shared history.'); $('pub-msg').focus(); return; }
+  /** Save a version for everyone (editors) – called by every "Save version" button. */
+  async function saveShared(name, note = '') {
+    const author = askName();
+    const message = note ? `${name}\n\n${note}` : name;
+    LGUVersions.saveVersion(name, note, false); // also keep a copy on this device
     try {
-      setStatus('busy', 'Publishing to GitHub…');
-      LGUVersions.saveVersion(`Published: ${msg}`, '', false);
-      await publish(msg);
-      setStatus('ok', `Published “${msg}”. Everyone gets it the next time they open or refresh the site. The site itself doesn't need to rebuild.`);
+      setStatus('busy', `Saving “${name}” for everyone…`);
+      try { await publish(message, { author }); }
+      catch (e) {
+        if (e.status !== 409) throw e;
+        await refresh(true);
+        const other = latest ? `“${latest.message.split('\n')[0]}” by ${latest.author || 'another editor'} (${fmt(latest.date)})` : 'a newer version';
+        if (!confirm(`${other} was saved after you loaded the plan.\n\nSave yours as the newest shared version anyway? Theirs stays in the history, and you can compare the two in Versions.`)) {
+          setStatus('idle', `Not shared. “${name}” is saved on this device only.`); return false;
+        }
+        await publish(message, { author, force: true });
+      }
+      notify(`Saved “${name}” for everyone`);
+      setStatus('ok', `Saved “${name}” for everyone. Others get it the next time they open or refresh the planner.`);
       await refresh(true);
+      return true;
     } catch (e) {
-      setStatus('error', e.status === 409 ? e.message : e.status === 401 || e.status === 403 ? `GitHub refused the publish (${e.message}). Check the token hasn't expired and has Contents: Read and write.` : `Publish failed: ${e.message}`);
+      setStatus('error', e.status === 401 || e.status === 403
+        ? `GitHub didn't accept the save (${e.message}). The editor key may have expired; ask for a new editor link. “${name}” is saved on this device.`
+        : `Couldn't save to GitHub (${e.message}). “${name}” is saved on this device; try again later.`);
+      if (currentTab !== 'history') notify(`Saved on this device only (GitHub: ${e.status || 'offline'})`, 6000);
+      return false;
     }
   }
+  function saveFromPrompt() {
+    const name = prompt('Name this version', `Version ${new Date().toLocaleDateString()}`);
+    if (name !== null) saveShared(name.trim() || `Version ${new Date().toLocaleDateString()}`);
+  }
+  const canPublish = () => !!token();
 
   async function refresh(quiet) {
     try {
@@ -240,8 +281,9 @@
   // ---------------------------------------------------------------- startup
   (async () => {
     const remote = await refresh(true);
-    if (!remote) { paint(); return; }
+    if (!remote) { if (keyJustAdded) notify('Editing enabled on this device. Save version now saves for everyone.', 6000); paint(); return; }
     const s = sync();
+    if (keyJustAdded) notify('Editing enabled on this device. Save version now saves for everyone.', 6000);
     // First visit on this device (no saved data): start from the shared plan automatically.
     if (!HAD_SAVED_DATA && !s.commit) { load(remote, null); notify(`Loaded shared plan “${remote.message}”`); return; }
     // Returning visitor who hasn't changed anything since loading a shared version: follow the latest quietly.
@@ -251,5 +293,5 @@
   renderHooks.push(() => { if (currentTab === 'history') paint(); else banner(); });
   paint();
 
-  window.LGUShared = { refresh, publish, fetchLatest, listHistory, cfg, hash, dirty };
+  window.LGUShared = { refresh, publish, saveShared, canPublish, fetchLatest, listHistory, cfg, hash, dirty };
 })();

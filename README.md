@@ -3,7 +3,7 @@
 Open `index.html` in a browser. It works offline and doesn't need a server.
 
 - **Share it:** run `npm run build` and send `dist/lgu-field-planner.html`, one self-contained file. Each person's edits are saved in their own browser; use *Data & settings → Export / Import all data (JSON)* to pass a plan between people.
-- **Shared versions:** on the published site, **Versions → Shared versions (GitHub)** shows the plan everyone sees and its full history. Editors sign in once with a GitHub token and click **Publish to GitHub**; everyone else gets the new plan the next time they open the site.
+- **Shared versions:** people who open the **editor link** (`…/lgu-field-planner/#key=…`) once can click **Save version**, and it's saved on GitHub for everyone, with their name. Everyone else opens the plain link and sees the latest shared plan and its full history (**Versions → Shared versions**).
 - **Develop it:** see [`DEVELOPER.md`](DEVELOPER.md) for architecture, data model, business rules, tests and publishing.
 
 | File | Purpose |

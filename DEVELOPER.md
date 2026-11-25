@@ -327,10 +327,16 @@ No other code needs to know where data lives.
 
 `github-sync.js` makes the GitHub repository the shared store. **`data/plan.json` is the plan everyone sees; every Publish is a git commit to it**, so GitHub keeps the full history (who, when, message), and any version can be compared, loaded or downloaded.
 
-| Who | Can | Needs |
+| Who | Opens | Can |
 |---|---|---|
-| Anyone opening the site | See the latest shared plan, browse, compare and load any earlier shared version, edit locally | Nothing (public repository) |
-| Editors | **Publish** the current plan as a new shared version | A fine-grained token: this repository only, *Contents: Read and write*. Entered under Versions → Shared versions → Editor sign-in and stored in that browser only |
+| Viewers | `https://uiucwonger.github.io/lgu-field-planner/` | See the latest shared plan and its full history; compare, load or download any version; try changes. *Save version* stays on their device |
+| Editors | **Editor link** `https://uiucwonger.github.io/lgu-field-planner/#key=<token>` (once per device) | Everything above, plus **Save version saves for everyone**: one GitHub commit, with their name (asked once) and the time |
+
+- **Editor link:** the key is remembered on the device and removed from the address bar. The `#…` part of a URL is never sent to the web server.
+- **Copying the link:** editors can copy it for others under *Versions → Shared versions → Editor options*.
+- **Stopping:** *Stop editing on this device* switches that device back to view-only.
+- **The key** is one fine-grained token created by the repository owner: this repository only, *Contents: Read and write*, with an expiry.
+- **Rotating:** to revoke everyone's editing, delete the token on GitHub, create a new one and send a new editor link. Note that the key can write any file in this repository, not just the plan.
 
 **Behavior on page load:**
 1. **First visit on a device:** loads the latest shared plan automatically.
@@ -338,7 +344,7 @@ No other code needs to know where data lives.
 3. **Returning with unpublished local edits:** nothing is overwritten. A banner offers *See what changed* or *Load it*; loading auto-saves the local edits as a device version first.
 4. **GitHub unreachable or rate-limited:** the app works from local data, and the card explains why.
 
-**Conflict safety:** publish compares the file's current `sha` with the one this browser loaded. If someone published in between, the publish is blocked with instructions; GitHub also rejects stale writes with 409.
+**Two editors:** before saving, the planner compares the file's current `sha` with the one this browser loaded. If someone saved in between, the editor sees whose version it was and chooses: save theirs as the newest version (both stay in the history), or keep theirs on the device only. GitHub also rejects stale writes with 409.
 
 **Limits:**
 - Unauthenticated GitHub API reads are 60/hour per network; one page load uses 2, so about 30 page loads an hour from one location. Editors with a token get 5,000/hour.
@@ -347,7 +353,7 @@ No other code needs to know where data lives.
 
 **Config:** owner and repository are detected from `https://<owner>.github.io/<repo>/`. Otherwise the defaults are `uiucwonger/lgu-field-planner`, branch `main`, path `data/plan.json`. They can be overridden under *Repository settings* in the Editor box.
 
-**Storage keys:** `lgu-github-token-v1` (token), `lgu-github-sync-v1` (which shared commit this device is based on, plus a content hash for "unpublished changes"), `lgu-github-config-v1`.
+**Storage keys:** `lgu-github-token-v1` (editor key), `lgu-editor-name-v1` (name shown in history), `lgu-github-sync-v1` (which shared commit this device is based on, plus a content hash for "unpublished changes"), `lgu-github-config-v1`.
 
 ## 11. Conventions
 
