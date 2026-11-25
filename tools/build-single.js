@@ -9,8 +9,8 @@ const root = path.join(__dirname, '..');
 const read = f => fs.readFileSync(path.join(root, f), 'utf8');
 let html = read('index.html');
 
-html = html.replace(/<link rel="stylesheet" href="([^"]+)">/g, (_, f) => `<style>\n${read(f)}\n</style>`);
-html = html.replace(/<script defer src="([^"]+)"><\/script>/g, (_, f) =>
+html = html.replace(/<link rel="stylesheet" href="([^"?]+)(?:\?[^"]*)?">/g, (_, f) => `<style>\n${read(f)}\n</style>`);
+html = html.replace(/<script defer src="([^"?]+)(?:\?[^"]*)?"><\/script>/g, (_, f) =>
   `<script>\n${read(f).replace(/<\/script/gi, '<\\/script')}\n</script>`);
 // Inline scripts run immediately (no defer), so move them to the end of <body> to keep DOM-ready order.
 const scripts = [];
@@ -20,7 +20,7 @@ html = html.replace('</body>', `${scripts.join('\n')}\n</body>`);
 const logo = path.join(root, 'logo.png');
 if (fs.existsSync(logo)) {
   const uri = `data:image/png;base64,${fs.readFileSync(logo).toString('base64')}`;
-  html = html.split('"logo.png"').join(`"${uri}"`);
+  html = html.replace(/"logo\.png(?:\?[^"]*)?"/g, `"${uri}"`);
 }
 const stamp = new Date().toISOString().slice(0, 10);
 html = html.replace('<head>', `<head>\n  <!-- Built ${stamp} by tools/build-single.js from the LGU Field Planner source. Edit the source, not this file. -->`);

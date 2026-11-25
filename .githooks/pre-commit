@@ -1,0 +1,3 @@
+#!/bin/sh
+# Keep index.html's ?v=<hash> asset stamps current so browsers never show stale scripts/styles after an update.
+node tools/stamp-assets.js >/dev/null && git add index.html

@@ -6,9 +6,10 @@
   "scripts": {
     "test": "node tools/test-analysis.js",
     "test:ui": "node tools/test-ui.js",
-    "build": "node tools/build-single.js",
+    "build": "node tools/stamp-assets.js && node tools/build-single.js",
     "test:sync": "node tools/test-sync.js",
-    "test:all": "node tools/test-analysis.js && node tools/test-ui.js && node tools/test-sync.js"
+    "test:all": "node tools/test-analysis.js && node tools/test-ui.js && node tools/test-sync.js",
+    "stamp": "node tools/stamp-assets.js"
   },
   "devDependencies": {
     "jsdom": "^24.0.0"

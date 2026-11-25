@@ -60,7 +60,7 @@ function browser(storage = {}, url = 'https://uiucwonger.github.io/lgu-field-pla
   const scripts = [...html.matchAll(/<script defer src="([^"]+)"><\/script>/g)].map(m => m[1]);
   const pre = `<script>${Object.entries(storage).map(([k, v]) => `localStorage.setItem(${JSON.stringify(k)},${JSON.stringify(v).replace(/</g, '\\u003c')});`).join('')}</script>`;
   html = html.replace(/<script defer src="[^"]+"><\/script>/g, '').replace('<body>', '<body>' + pre)
-    .replace('</body>', () => scripts.map(f => `<script>${fs.readFileSync(path.join(root, f), 'utf8')}</script>`).join('\n') + '</body>');
+    .replace('</body>', () => scripts.map(f => `<script>${fs.readFileSync(path.join(root, f.split('?')[0]), 'utf8')}</script>`).join('\n') + '</body>');
   const w = new JSDOM(html, { runScripts: 'dangerously', virtualConsole: vc, url, pretendToBeVisual: true,
     beforeParse(win) { win.fetch = fakeFetch; win.TextEncoder = TextEncoder; win.TextDecoder = TextDecoder; } }).window;
   w.confirm = () => true; w.alert = m => { w.__alert = m; }; w.prompt = (q, d) => /^Your name/.test(q) ? 'Jason Wong' : (w.__nextName || d); w.HTMLElement.prototype.scrollIntoView = function () {};

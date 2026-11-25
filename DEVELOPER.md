@@ -365,6 +365,13 @@ No other code needs to know where data lives.
 
 **Storage keys:** `lgu-github-token-v1` (editor key), `lgu-editor-name-v1` (name shown in history), `lgu-github-sync-v1` (which shared commit this device is based on, plus a content hash for "unpublished changes"), `lgu-github-config-v1`.
 
+## 10b. Cache-busting (why updates always show up)
+
+`index.html` references each script, stylesheet and the logo as `file.js?v=<hash of the file>`. A changed file gets a new address, so browsers and GitHub Pages' ~10-minute cache fetch it immediately; unchanged files stay cached.
+- `tools/stamp-assets.js` (`npm run stamp`) rewrites the hashes. `npm run build` runs it first.
+- The git hook in `.githooks/pre-commit` runs it on every commit (enabled with `git config core.hooksPath .githooks`; new clones need that one command).
+- Never edit the `?v=` values by hand. `tools/build-single.js` and the test runners ignore them.
+
 ## 11. Conventions
 
 - Prefer **ES2020**, no build tooling. Keep `analysis.js` free of DOM access so it stays testable in Node.

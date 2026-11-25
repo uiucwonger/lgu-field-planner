@@ -15,7 +15,7 @@ function boot(savedState) {
   let html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
   const scripts = [...html.matchAll(/<script defer src="([^"]+)"><\/script>/g)].map(m => m[1]);
   html = html.replace(/<script defer src="[^"]+"><\/script>/g, '')
-    .replace('</body>', () => scripts.map(f => `<script>${fs.readFileSync(path.join(root, f), 'utf8')}</script>`).join('\n') + '</body>');
+    .replace('</body>', () => scripts.map(f => `<script>${fs.readFileSync(path.join(root, f.split('?')[0]), 'utf8')}</script>`).join('\n') + '</body>');
   if (savedState) html = html.replace('<body>', `<body><script>localStorage.setItem("lgu-field-planner-v1",${JSON.stringify(JSON.stringify(savedState)).replace(/</g, '\\u003c')});</script>`);
   const w = new JSDOM(html, { runScripts: 'dangerously', virtualConsole: vc, url: 'http://localhost/', pretendToBeVisual: true }).window;
   w.confirm = () => true; w.alert = () => {}; w.HTMLElement.prototype.scrollIntoView = function () {};
