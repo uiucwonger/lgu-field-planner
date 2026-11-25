@@ -57,7 +57,7 @@
     const info = $('undo-info');
     if (info) info.textContent = `${undoStack.length + (pending !== null ? 1 : 0)} undo step(s) and ${redoStack.length} redo step(s) are available in this session. The undo history clears when the page reloads; saved versions don't.`;
   }
-  function flash(msg) { $('save-state').textContent = msg; }
+  function flash(msg) { notify(msg); }
 
   $('undo').addEventListener('click', undo);
   $('redo').addEventListener('click', redo);
@@ -150,14 +150,19 @@
   const describeBooking = b => `${b.day} ${b.field} ${b.start}–${b.end} · ${b.team}${b.canceled ? ' (canceled)' : ''}`;
   function showDiff() {
     const a = stateOf($('cmp-a').value), b = stateOf($('cmp-b').value);
+    if (!a || !b) { $('version-diff').replaceChildren(h('p', { class: 'hint', text: 'Choose two versions.' })); return; }
+    renderDiff(a, b);
+  }
+  /** Show what changes going from state a to state b. caption = optional heading (used for shared versions). */
+  function renderDiff(a, b, caption) {
     const out = $('version-diff');
-    if (!a || !b) { out.replaceChildren(h('p', { class: 'hint', text: 'Choose two versions.' })); return; }
     const d = A.diffStates(a, b);
     const ra = A.analyze(a).summary, rb = A.analyze(b).summary;
     const delta = (x, y) => { const n = y - x; return n ? ` (${n > 0 ? '+' : ''}${n})` : ''; };
     const section = (title, items) => items.length ? h('details', { open: items.length <= 12 }, h('summary', { text: `${title} (${items.length})` }), h('ul', {}, items.slice(0, 200).map(x => h('li', {}, x)))) : null;
     const chg = (c, label) => [h('b', { text: label }), ': ', c.props.map(p => `${p} ${fmtVal(c.before[p])} → ${fmtVal(c.after[p])}`).join('; ')];
     out.replaceChildren(
+      caption ? h('p', { class: 'diff-caption' }, h('b', { text: caption })) : null,
       h('div', { class: 'diff-kpis' },
         h('span', { text: `Sessions secure: ${ra.sessionsSecure} → ${rb.sessionsSecure}${delta(ra.sessionsSecure, rb.sessionsSecure)}` }),
         h('span', { text: `Teams short: ${ra.teamsShort} → ${rb.teamsShort}${delta(ra.teamsShort, rb.teamsShort)}` }),
@@ -190,5 +195,18 @@
   renderHooks.push(() => { if (currentTab === 'history') renderVersions(); else updateButtons(); });
   renderVersions();
 
-  window.LGUVersions = { saveVersion, undo, redo, loadVersions, commit };
+  /** Replace all data (e.g. with a shared plan). label = auto-save the current data as a local version first. */
+  function replaceState(obj, label, { undoable = true } = {}) {
+    commit();
+    if (label) saveVersion(label, '', true);
+    if (undoable) { undoStack.push(JSON.stringify(state)); redoStack.length = 0; }
+    applyState(JSON.stringify(obj));
+  }
+  function compareStates(a, b, caption) {
+    showTab('history');
+    renderDiff(a, b, caption);
+    $('version-diff').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  window.LGUVersions = { saveVersion, undo, redo, loadVersions, commit, replaceState, compareStates };
 })();

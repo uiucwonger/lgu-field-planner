@@ -36,6 +36,7 @@ const badge = s => h('span', { class: `badge b-${s.split(' ')[0]}`, text: s });
 
 // ---------------------------------------------------------------- state
 const clone = o => JSON.parse(JSON.stringify(o));
+const HAD_SAVED_DATA = (() => { try { return !!localStorage.getItem(STORE); } catch (e) { return false; } })(); // first visit = false
 let state = load();
 let result;
 // Extension points used by board.js and versions.js
@@ -99,11 +100,16 @@ function migrate(s) {
   return s;
 }
 let saveTimer;
+/** Header status message. A message set with notify() stays visible ~4 s instead of being
+ *  replaced by the routine "Saving…/Saved" text from the autosave that follows it. */
+let notice = { text: '', until: 0 };
+function notify(text, ms = 4000) { notice = { text, until: Date.now() + ms }; $('save-state').textContent = text; }
+function saveStatus(text) { if (Date.now() >= notice.until) $('save-state').textContent = text; }
 function save() {
   clearTimeout(saveTimer);
-  $('save-state').textContent = 'Saving…';
+  saveStatus('Saving…');
   saveTimer = setTimeout(() => {
-    try { localStorage.setItem(STORE, JSON.stringify(state)); $('save-state').textContent = `Saved ${new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`; }
+    try { localStorage.setItem(STORE, JSON.stringify(state)); saveStatus(`Saved ${new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`); }
     catch (e) { $('save-state').textContent = 'Not saved (storage blocked)'; }
   }, 250);
 }

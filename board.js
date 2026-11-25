@@ -295,7 +295,7 @@
     closeOptimize();
     changed(true);
     const msg = `Optimize added ${n} sessions${moved ? `, moved ${moved}` : ''}. Undo is available.`;
-    setTimeout(() => { $('save-state').textContent = msg; }, 400); // after the autosave notice
+    notify(msg);
   }
   $('board-optimize').addEventListener('click', openOptimize);
 

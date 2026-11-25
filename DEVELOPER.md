@@ -30,7 +30,7 @@ Requirements: any modern browser (Safari, Chrome, Edge, Firefox). Node 18+ for t
 
 | Path | What it is | Notes |
 |---|---|---|
-| `index.html` | Page shell: header, tab bar, one `<section role="tabpanel">` per tab | Scripts load with `defer`, in this order: `seed-data.js`, `analysis.js`, `app.js`, `versions.js`, `board.js`, `longterm.js` |
+| `index.html` | Page shell: header, tab bar, one `<section role="tabpanel">` per tab | Scripts load with `defer`, in this order: `seed-data.js`, `analysis.js`, `app.js`, `versions.js`, `board.js`, `longterm.js`, `github-sync.js` |
 | `style.css` | All styling | LGU brand block (black / yellow `#fbd108` / white) is appended near the end. Later rules override earlier ones |
 | `seed-data.js` | `window.LGU_SEED`, the starting data set | One long JSON line. Regenerate with a script, don't hand-edit (see §8) |
 | `analysis.js` | **Analysis engine.** Pure functions, no DOM | Works in the browser (`window.LGUAnalysis`) and Node (`require`). Most business logic lives here |
@@ -38,9 +38,13 @@ Requirements: any modern browser (Safari, Chrome, Edge, Firefox). Node 18+ for t
 | `versions.js` | Undo/redo, named versions, compare, restore | `window.LGUVersions` |
 | `board.js` | Drag-and-drop Board tab and the **Optimize** panel | `window.LGUBoard` |
 | `longterm.js` | **Long Term Planning** tab | `window.LGULongTerm`. Meeting-note content (owners, blockers, options) is hard-coded here |
+| `github-sync.js` | **Shared versions on GitHub** (Versions tab, top card + header banner) | `window.LGUShared`. See §10a |
+| `data/plan.json` | The shared plan (created by the first Publish) | Each publish is one commit, so the git history is the shared version history |
 | `logo.png` | LGU crest (header + favicon) | Hidden automatically if missing |
 | `tools/test-analysis.js` | Analysis unit tests | `npm test` |
-| `tools/test-ui.js` | UI smoke tests in jsdom | `npm run test:ui` |
+| `tools/test-ui.js` | UI smoke tests in jsdom | `npm run test:sync` | Shared versions against a fake GitHub API: first visit loads shared, auto-follow, local edits never overwritten, banner, history/compare/load, conflict blocking, offline | ~5 s, needs `npm install` |
+| `npm run test:ui` |
+| `tools/test-sync.js` | Shared-version tests against a fake GitHub API | `npm run test:sync` |
 | `tools/build-single.js` | Bundles everything into one HTML file | `npm run build` → `dist/` |
 | `tools/coaches-2026-11.json` | Source list of head coaches and GK rosters used to build the seed | Reference data |
 | `package.json` | npm scripts + jsdom dev dependency | Not needed to *run* the app |
@@ -318,6 +322,32 @@ If the change affects users with saved data, add a migration (§7).
 No other code needs to know where data lives.
 
 ---
+
+## 10a. Shared versions (GitHub)
+
+`github-sync.js` makes the GitHub repository the shared store. **`data/plan.json` is the plan everyone sees; every Publish is a git commit to it**, so GitHub keeps the full history (who, when, message), and any version can be compared, loaded or downloaded.
+
+| Who | Can | Needs |
+|---|---|---|
+| Anyone opening the site | See the latest shared plan, browse, compare and load any earlier shared version, edit locally | Nothing (public repository) |
+| Editors | **Publish** the current plan as a new shared version | A fine-grained token: this repository only, *Contents: Read and write*. Entered under Versions → Shared versions → Editor sign-in and stored in that browser only |
+
+**Behavior on page load:**
+1. **First visit on a device:** loads the latest shared plan automatically.
+2. **Returning, no local edits since loading a shared version:** follows the latest shared version automatically.
+3. **Returning with unpublished local edits:** nothing is overwritten. A banner offers *See what changed* or *Load it*; loading auto-saves the local edits as a device version first.
+4. **GitHub unreachable or rate-limited:** the app works from local data, and the card explains why.
+
+**Conflict safety:** publish compares the file's current `sha` with the one this browser loaded. If someone published in between, the publish is blocked with instructions; GitHub also rejects stale writes with 409.
+
+**Limits:**
+- Unauthenticated GitHub API reads are 60/hour per network; one page load uses 2, so about 30 page loads an hour from one location. Editors with a token get 5,000/hour.
+- Files over 1 MB fall back to `download_url`.
+- The plan is public if the repository is public.
+
+**Config:** owner and repository are detected from `https://<owner>.github.io/<repo>/`. Otherwise the defaults are `uiucwonger/lgu-field-planner`, branch `main`, path `data/plan.json`. They can be overridden under *Repository settings* in the Editor box.
+
+**Storage keys:** `lgu-github-token-v1` (token), `lgu-github-sync-v1` (which shared commit this device is based on, plus a content hash for "unpublished changes"), `lgu-github-config-v1`.
 
 ## 11. Conventions
 
