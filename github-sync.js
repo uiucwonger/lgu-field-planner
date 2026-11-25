@@ -248,9 +248,13 @@
       await refresh(true);
       return true;
     } catch (e) {
-      setStatus('error', e.status === 401 || e.status === 403
-        ? `GitHub didn't accept the save (${e.message}). The editor key may have expired; ask for a new editor link. “${name}” is saved on this device.`
-        : `Couldn't save to GitHub (${e.message}). “${name}” is saved on this device; try again later.`);
+      const kept = `“${name}” is saved on this device.`;
+      setStatus('error',
+        e.status === 401 ? `GitHub didn't recognize the editor key (expired or deleted). Ask for a new editor link. ${kept}`
+        : e.status === 403 && /not accessible by personal access token/i.test(e.message)
+          ? `The editor key can read but not save. On GitHub, edit the key: Repository access must include ${cfg().owner}/${cfg().repo}, and Repository permissions → Contents must be "Read and write". The same editor link keeps working after you update it. ${kept}`
+        : e.status === 403 || e.status === 404 ? `GitHub refused the save (${e.message}). Check the editor key has access to ${cfg().owner}/${cfg().repo} with Contents: Read and write. ${kept}`
+        : `Couldn't save to GitHub (${e.message}). ${kept} Try again later.`);
       if (currentTab !== 'history') notify(`Saved on this device only (GitHub: ${e.status || 'offline'})`, 6000);
       return false;
     }
