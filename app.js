@@ -172,7 +172,10 @@ function renderDashboard() {
         h('div', { class: 'bar-risk', style: `left:${w(d.peakSecure)};width:${w(d.atRiskPlayers)}` }),
         h('div', { class: 'bar-cap', style: `left:${w(d.capacity)}` })),
       h('span', { class: 'bar-val', text: `${d.peakSecure}${d.atRiskPlayers ? ` +${d.atRiskPlayers} risk` : ''} / ${d.capacity} · ${pct(d.utilization)}` }));
-  })), h('p', { class: 'hint', style: 'margin-top:8px', text: 'Bar = peak players on usable fields; black line = usable capacity.' }));
+  })), h('div', { class: 'legend' },
+    h('span', {}, h('i', { class: 'lg lg-fill' }), 'Peak players on usable fields'),
+    result.daily.some(d => d.atRiskPlayers) ? h('span', {}, h('i', { class: 'lg lg-risk' }), 'At risk: players booked on lapsed or lost fields') : null,
+    h('span', {}, h('i', { class: 'lg lg-cap' }), 'Capacity of usable fields')));
 
   // status tiles
   const byStatus = {};

@@ -530,3 +530,9 @@ a.btn{text-decoration:none;display:inline-block}
   .lt-section-head, .issues-head, .opt-head { min-width: 0; }
   .card p, .card li, .hint, .lt-why, .lt-facts dd { overflow-wrap: anywhere; }
 }
+
+/* Daily capacity legend */
+.legend .lg{display:inline-block;width:14px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px}
+.legend .lg-fill{background:#111}
+.legend .lg-risk{background:repeating-linear-gradient(45deg,#e58b7c 0 3px,#f6d2cb 3px 6px)}
+.legend .lg-cap{width:3px;height:12px;border-radius:0;background:var(--yellow-deep)}
