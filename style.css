@@ -503,3 +503,30 @@ a.btn{text-decoration:none;display:inline-block}
   .lt-day { padding: 6px 9px; }
   .bcard { min-height: 34px; }
 }
+
+/* ---- Phone: never let any element widen the page ---- */
+@media (max-width: 700px) {
+  html, body { max-width: 100%; overflow-x: hidden; }
+  main.wrap, section[role=tabpanel], .card, .grid2, .grid2 > *, .scroller, details, .issues, .issue-group { min-width: 0; max-width: 100%; }
+  /* Tables that aren't already inside a scroller (Dashboard program table, Data issues, settings) scroll on their own */
+  .card table:not(.edit), #program-table table, .issue-table, .surface-matrix {
+    display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; max-width: 100%;
+  }
+  .scroller table { display: table; overflow: visible; }      /* tables in a scroller keep normal layout */
+  .scroller { overflow-x: auto; }
+  .issue-group > summary { flex-wrap: wrap; }
+  .bar-row { grid-template-columns: 34px minmax(0, 1fr) auto; }
+  .legend { font-size: 11.5px; }
+  .heat td.cell { min-width: 64px; }
+  .matrix td.day { min-width: 84px; }
+  .heat td:first-child, .heat th:first-child, .matrix td:first-child, .matrix th:first-child { max-width: 140px; white-space: normal; }
+  #board-field { min-width: 0; max-width: 100%; width: 100%; }
+  .detail { max-width: 100%; overflow-x: auto; }
+}
+@media (max-width: 700px) {
+  .stack { max-width: 100%; }
+  .surface-matrix { min-width: 0; }
+  input[size], .controls input { max-width: 100%; }
+  .lt-section-head, .issues-head, .opt-head { min-width: 0; }
+  .card p, .card li, .hint, .lt-why, .lt-facts dd { overflow-wrap: anywhere; }
+}
