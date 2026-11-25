@@ -38,6 +38,12 @@ function fakeFetch(url, opts = {}) {
     if (!ok) return json(401, { message: 'Bad credentials' });
     const body = JSON.parse(opts.body); const head = latestFor(path, 'main');
     if (head && body.sha !== head.fileSha) return json(409, { message: 'is at ' + head.fileSha + ' but expected ' + body.sha });
+    const text = Buffer.from(body.content, 'base64').toString('utf8');
+    if (head && head.text === text) {          // real GitHub: same content -> commit exists but doesn't touch the file
+      const empty = { sha: sha(), path: '(no change)', fileSha: head.fileSha, message: body.message, author: (body.author && body.author.name) || 'x', date: new Date().toISOString(), text };
+      repo.commits.unshift(empty);
+      return json(200, { content: { sha: head.fileSha }, commit: { sha: empty.sha, author: { name: empty.author, date: empty.date } } });
+    }
     const c = { sha: sha(), path, fileSha: sha(), message: body.message, author: (body.author && body.author.name) || 'uiucwonger', date: new Date(Date.now() + n * 1000).toISOString(), text: Buffer.from(body.content, 'base64').toString('utf8') };
     repo.commits.unshift(c);
     return json(201, { content: { sha: c.fileSha }, commit: { sha: c.sha, author: { name: c.author, date: c.date } } });
@@ -95,6 +101,13 @@ const EDITOR = 'https://uiucwonger.github.io/lgu-field-planner/#key=good-token';
   const editorAgain = browser(A.storage()); await wait(500);
   ok(editorAgain.w.LGUShared.canPublish(), 'editor stays an editor on later visits with the plain link');
 
+  // 2b. Saving twice with no plan changes still creates two visible versions
+  const nBefore = planCommits().length;
+  await saveVia(A, 'Same plan, second save');
+  A.d.querySelector('[data-tab=history]').click(); await wait(100);
+  ok(planCommits().length === nBefore + 1 && /Same plan, second save/.test(T(A.d.querySelector('#shared-card .shared-table tbody tr'))), 'saving an unchanged plan still appears as a new version');
+  ok(!('_version' in A.w.eval('state')), 'version label is not mixed into the plan data');
+
   // 3. New visitor B (fresh browser) gets the shared plan automatically
   let B = browser(); await wait(600);
   ok(bookings(B.w) === 400, 'first-time visitor starts from the shared plan (400 bookings, not the seed)');
@@ -124,10 +137,10 @@ const EDITOR = 'https://uiucwonger.github.io/lgu-field-planner/#key=good-token';
   // 6. History: list, compare, load an older version
   B.d.querySelector('[data-tab=history]').click(); await wait(100);
   const rows = B.d.querySelectorAll('#shared-card .shared-table tbody tr');
-  ok(rows.length === 3, `shared history lists all ${rows.length} published versions`);
-  [...rows[2].querySelectorAll('button')].find(x => x.textContent === 'Compare').click(); await wait(400);
+  ok(rows.length === 4, `shared history lists all ${rows.length} published versions`);
+  [...rows[3].querySelectorAll('button')].find(x => x.textContent === 'Compare').click(); await wait(400);
   ok(/Bookings added/.test(T(B.d.getElementById('version-diff'))), 'compare against an older shared version works');
-  [...rows[2].querySelectorAll('button')].find(x => x.textContent === 'Load').click(); await wait(400);
+  [...rows[3].querySelectorAll('button')].find(x => x.textContent === 'Load').click(); await wait(400);
   ok(bookings(B.w) === 400, 'load an older shared version (400 bookings)');
 
   // 7. Two editors: the second is warned and can choose; nothing is lost either way

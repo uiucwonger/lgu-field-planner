@@ -98,7 +98,8 @@
     let text;
     if (file.content && file.encoding === 'base64') text = b64decode(file.content);
     else text = await (await fetch(file.download_url, { cache: 'no-store' })).text(); // > 1 MB files
-    return { text, data: JSON.parse(text), sha: file.sha, commit: cm.sha, message: cm.commit.message, date: cm.commit.author.date, author: cm.commit.author.name || (cm.author && cm.author.login) || '' };
+    const data = JSON.parse(text); delete data._version;   // version label lives in the file, not in the plan
+    return { text, data, sha: file.sha, commit: cm.sha, message: cm.commit.message, date: cm.commit.author.date, author: cm.commit.author.name || (cm.author && cm.author.login) || '' };
   }
   async function listHistory(n = 30) {
     const c = cfg();
@@ -170,7 +171,9 @@
     }
     const body = { message: message || `Plan update ${new Date().toLocaleDateString()}`, branch: c.branch,
       author: { name: author, email: 'field-planner@losgatosunited.invalid' },
-      content: b64encode(JSON.stringify(state, null, 1)) };
+      // `_version` makes every save change the file, so GitHub always records it in the file's history
+      // (an identical file would create an empty commit that doesn't appear in the version list).
+      content: b64encode(JSON.stringify(Object.assign({}, state, { _version: { name: message.split('\n')[0], by: author, savedAt: new Date().toISOString() } }), null, 1)) };
     if (remoteSha) body.sha = remoteSha;
     const r = await gh(`${repoPath(c)}/contents/${c.path.split('/').map(encodeURIComponent).join('/')}`, { method: 'PUT', body: JSON.stringify(body) }, true);
     setSync({ sha: r.content.sha, commit: r.commit.sha, message: body.message, date: r.commit.author.date, author: r.commit.author.name, baseHash: hash(state) });
