@@ -133,7 +133,7 @@
           } }),
           h('button', { class: 'btn mini', text: 'Download', onclick: () => download(`lgu-version-${v.name.replace(/[^\w-]+/g, '_')}.json`, JSON.stringify(v.data, null, 2), 'application/json') }),
           h('button', { class: 'btn mini', title: 'Delete version', text: '✕', onclick: () => { if (confirm(`Delete version “${v.name}”?`)) { storeVersions(loadVersions().filter(x => x.id !== v.id)); renderVersions(); } } }))
-      )) : [h('tr', {}, h('td', { colspan: 7, class: 'muted', text: 'No versions yet. Use “Save version” to create one.' }))])
+      )) : [h('tr', {}, h('td', { colspan: 7, class: 'muted', text: 'No copies on this device yet.' }))])
     );
     updateButtons();
   }
@@ -187,10 +187,6 @@
   // Editors (opened the editor link) save for everyone via GitHub; others save on this device.
   const shared = () => window.LGUShared && window.LGUShared.canPublish();
   const save = (name, note) => shared() ? window.LGUShared.saveShared(name || `Version ${new Date().toLocaleDateString()}`, note) : saveVersion(name, note);
-  $('ver-save').addEventListener('click', () => {
-    save($('ver-name').value.trim(), $('ver-note').value.trim());
-    $('ver-name').value = ''; $('ver-note').value = '';
-  });
   $('quick-version').addEventListener('click', () => {
     const name = prompt('Name this version', `Version ${new Date().toLocaleDateString()}`);
     if (name !== null) save(name.trim());

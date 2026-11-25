@@ -172,7 +172,7 @@
         h('a', { href: `${repoUrl}/commits/${c.branch}/${c.path}`, target: '_blank', rel: 'noopener', class: 'muted', text: `${c.owner}/${c.repo} · ${c.path}` })),
       h('p', { class: 'hint', text: signedIn
         ? 'You can edit. Click Save version (top right or below) and your version is saved on GitHub for everyone, with your name and the time. Every version is kept.'
-        : 'View-only on this device. You can explore and try changes here, but versions you save stay on this device. Open the editor link to save versions for everyone.' }),
+        : 'View-only on this device. You can explore and try changes here; Save version keeps a copy on this device only (see Copies on this device below). Open the editor link to save versions for everyone.' }),
       h('p', {}, h('span', { class: `lt-chip ${signedIn ? 'ok' : 'low'}`, text: signedIn ? `Editor${editorName() ? ` · ${editorName()}` : ''}` : 'View only' }), ' ', ...where),
       status.text ? h('p', { class: `shared-status ${status.kind}`, text: status.text }) : null,
       h('div', { class: 'controls' },

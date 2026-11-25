@@ -388,3 +388,10 @@ a.btn{text-decoration:none;display:inline-block}
 
 /* ---- Version credit next to the title ---- */
 .app-version{font-size:12px;font-weight:500;letter-spacing:.02em;color:#bdbdbd;margin-left:8px;vertical-align:middle;white-space:nowrap}
+
+/* ---- Versions tab: device copies (collapsed) ---- */
+.device-copies>summary{cursor:pointer;display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;list-style:none}
+.device-copies>summary::-webkit-details-marker{display:none}
+.device-copies>summary h2{margin:0;display:inline}
+.device-copies>summary h2::before{content:'▸ ';color:var(--muted)}
+.device-copies[open]>summary h2::before{content:'▾ '}
