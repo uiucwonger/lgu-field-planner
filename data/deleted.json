@@ -1,0 +1,18 @@
+{
+ "note": "Versions hidden from the Field Planner history. Remove an entry to bring a version back.",
+ "hidden": [
+  {
+   "commit": "6d26b485608b8670112fa34efc84b0c73685d4d0",
+   "message": "Test",
+   "by": "Jason Wong",
+   "at": "2026-11-25T05:13:56.501Z"
+  },
+  {
+   "commit": "958463667403b2320790bd362f56effa695c4cbb",
+   "message": "Delete “Test” (restores “Version 11/24/2026”)",
+   "by": "Jason Wong",
+   "at": "2026-11-25T05:13:56.501Z",
+   "restore": true
+  }
+ ]
+}
